@@ -1,62 +1,14 @@
-%%%-----------------------------------------------------------------------------
+%%% ----------------------------------------------------------------------------
 %%% @author Jim Rosenblum <jrosenblum@prodigy.net>
 %%% @copyright (C) 2015, Jim Rosenblum
 %%% @doc
 %%% The jwalk modue is intended to make it easy to work with the Erlang
 %%% encodings of JSON which return either maps or property lists. 
 %%%
-%%% Currently get/2 is supported which allows one to walk an object and return a
-%%% particular value.
-%%%
-%%% Get takes a Path list and a strcture representing the encoded JSON.
-%%%
-%%% The Path list can consist of tuples representing a javascript-like path:i.e.
-%%%
-%%% Obj.cars.make.model would be expressed as {"cars","make","model"}, as in </br>
-%%% jwalk:get({"cars","make","model"}, Obj).
-%%%
-%%% Additionally, the Path tuple can contain: </br>
-%%% Elements of a JSON array can be accessed by using the atoms `` 'first' '' and
-%%% `` 'last' '' or an integer index </br>
-%%%
-%%% A subset of JSON objects in an array can be selected using {select, {"name","value"}}
-%%% For example
-%%% ```
-%%% Cars = [{<<"cars">>, [ [{<<"color">>, <<"white">>}, {<<"age">>, <<"old">>}],
-%%%                       [{<<"color">>, <<"red">>},  {<<"age">>, <<"old">>}],
-%%%                       [{<<"color">>, <<"blue">>}, {<<"age">>, <<"new">>}]
-%%%                     ]}].
-%%% '''
-%%% Then 
-%%
-%%% ```
-%%% jwalk:get({"cars", {select {"age", "old"}}}, Cars).
-%%%
-%%%  [ [{<<"color">>, <<"white">>}, {<<"age">>, <<"old">>}],
-%%%    [{<<"color">>, <<"red">>},   {<<"age">>, <<"old">>}]
-%%% ]
-%%% '''
-%%%
 %%% This work is really a rip-off of https://github.com/seth/ej
 %%% @end
 %%% Created : 20 Nov 2015 by Jim Rosenblum <jrosenblum@Jims-MBP.attlocal.net>
-%%%-----------------------------------------------------------------------------
-
-
-%%%===================================================================
-%%% API
-%%%===================================================================
-
-%%%
-% Property lists are ordinary lists containing entries in the form of either 
-% tuples, whose first elements are keys used for lookup and insertion, or 
-% atoms, which work as shorthand for tuples {Atom, true}.
-%
-% Jsone libraries that convert VALID JSON will result in property lists that are
-% of the form </br>
-% [{_,_}...] </br>
-%
-
+%%% ----------------------------------------------------------------------------
 -module(jwalk).
 
 -export([get/2]).
@@ -66,11 +18,59 @@
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
--define(IS_SELECT(K), is_tuple(K) andalso element(1, K) == select).
+
+-define(IS_SELECT(K), (is_tuple(K) andalso element(1, K) == select)).
 -define(IS_INDEX(K), K == first orelse K == last orelse is_integer(K) orelse ?IS_SELECT(K)).
 
 
+-type name()  :: binary() | string().
+-type value() :: binary() | string().
+-type key()   :: {name(), value()} | 'first' | 'last' | non_neg_integer().
+-type keys()  :: [key()].
+-type obj()   :: map() | list().
+-type jwalk_return() :: map() | list() | undefined | [] | no_return().
 
+
+%% ----------------------------------------------------------------------------
+%% API
+%% ----------------------------------------------------------------------------
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Currently get/2 is supported which allows one to walk an object and 
+%% return a particular value.
+%%
+%% Get takes a Path list and a strcture representing the encoded JSON.
+%%
+%% The Path list can consist of tuples representing a javascript-like 
+%% path: i.e.,
+%%
+%% Obj.cars.make.model would be expressed as {"cars","make","model"}, as in </br>
+%% jwalk:get({"cars","make","model"}, Obj).
+%%
+%% Additionally, the Path tuple can contain: </br>
+%% Elements of a JSON array can be accessed by using the atoms `` 'first' '' and
+%% `` 'last' '' or an integer index </br>
+%%
+%% A subset of JSON objects in an array can be selected using {select, {"name","value"}}
+%% For example
+%% ```
+%% Cars = [{<<"cars">>, [ [{<<"color">>, <<"white">>}, {<<"age">>, <<"old">>}],
+%%                       [{<<"color">>, <<"red">>},  {<<"age">>, <<"old">>}],
+%%                       [{<<"color">>, <<"blue">>}, {<<"age">>, <<"new">>}]
+%%                     ]}].
+%% '''
+%% Then 
+%%
+%% ```
+%% jwalk:get({"cars", {select {"age", "old"}}}, Cars).
+%%
+%%  [ [{<<"color">>, <<"white">>}, {<<"age">>, <<"old">>}],
+%%    [{<<"color">>, <<"red">>},   {<<"age">>, <<"old">>}]
+%% ]
+%% '''
+%%
+-spec get(keys(), obj()) -> jwalk_return().
 
 get(Keys, Obj) ->
     try 
@@ -82,38 +82,49 @@ get(Keys, Obj) ->
 
 
 
-% If you make it to the end, couldn't find it, its undefined.
+%% -----------------------------------------------------------------------------
+%%                INTERNAL FUNCTIONS
+%% -----------------------------------------------------------------------------
+
+
+% Selecting a subset of an empty list is an empty list...
+walk([{select, {_,_}}|_], []) ->
+    [];
+
+% otherwise, it means we are udefined
 walk(_, []) ->
     undefined;
 
 % Target = Object: Name matches the first element of a tuple, continue with
 % the rest of the Names and the found Value.
-walk([N|Ns], [Target|_]) when is_tuple(Target), N == element(1, Target) ->
+walk([N|Keys], [Target|_]) when is_tuple(Target), N == element(1, Target) ->
     Value = element(2, Target),
-    case Ns of
+    case Keys of
         [] -> 
             Value;
         _More -> 
-            walk(Ns, Value)
+            walk(Keys, Value)
     end;
 
-% Key is an array selector (index), and Target is not an object. Anything
-% else (assuming valid JSON) would be indicitive of an Array: Array, null,
-% number, string, true or false.
-walk([I|Ns], [Elt|_]=Ts) when (not is_tuple(Elt)), ?IS_INDEX(I) ->
-    Element = index_to_element(I, Ts),
-    case Ns of
+% Key is an array selector (index), and the first element isn't {name, value}, so
+% assuming valid JSON, we would have an Array, not an Object.
+walk([I|Keys], [Elt|_]=Target) when (not is_tuple(Elt)), ?IS_INDEX(I) ->
+    Element = index_to_element(I, Target),
+    case Keys of
         [] ->
             Element;
         _More ->
-            walk(Ns, Element)
+            walk(Keys, Element)
     end;
 
-% Key is an array selector (index), but Target is not even a list.
-walk([I|_], null) when ?IS_INDEX(I) ->
-    undefined;
+% Key is an array selector (index), Target is either an Object or not a list.
 walk([I|_], T) when ?IS_INDEX(I) ->
     throw({index_for_non_list, T});
+
+% Key is an array selector (index), but Target is null (missing value).
+walk([I|_], null) when ?IS_INDEX(I) ->
+    undefined;
+
 
 % We have a Name, and an Array, Name could be located in any object within the 
 % Array.
@@ -126,16 +137,16 @@ walk([K|Ks], [Elt|_]=Ts) when (not is_tuple(Elt)) ->
             walk(Ks, Values)
     end;
                 
-
+% Any selecter applied to null is undefined.
 walk(_, null) -> undefined;
 
-% Path could not be satisfied by first element of array, try the next.
+% Path could not be satisfied by first element of list, try the next.
 walk(Keys, [_|Tl]) ->
     walk(Keys, Tl).
 
-% Result is supposed to be objects subsetted out of an Array, so
-% need to make sure that we have a legitimate array of results.
 
+% Used to make sure we signal undefined or have an Array - used when trying to
+% get a subset of an Array of Objects, so that better be an Array.
 make_array([]) ->
     undefined;
 
@@ -148,6 +159,7 @@ make_array(H) ->
             A
     end.
 
+% Get all elements from an Array that have the target indicated by the Keys.
 all_successes(_Ks, []) ->
     [];
 all_successes(Ks, [H|Tl]) ->
@@ -160,8 +172,6 @@ all_successes(Ks, [H|Tl]) ->
                   
 
             
-
-
 index_to_element({select, {K,V}}, L) ->
     F = fun(PList) -> 
                 proplists:lookup(K, PList) == {K, V} end,
