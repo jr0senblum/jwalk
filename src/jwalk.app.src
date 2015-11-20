@@ -1,0 +1,12 @@
+{application, jwalk,
+ [
+  {description, "An Erlang JSON Helper Library"},
+  {vsn, git},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]},
+  {modules, []},
+  {env, []}
+ ]}.
