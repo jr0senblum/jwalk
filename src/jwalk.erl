@@ -3,7 +3,7 @@
 %%% @copyright (C) 2015, Jim Rosenblum
 %%% @doc
 %%% The jwalk modue is intended to make it easy to work with the Erlang
-%%% encodings of JSON which return either maps or property lists. 
+%%% encodings of JSON which return either MAPS or PROPERTY lists. 
 %%%
 %%% This work is really a rip-off of https://github.com/seth/ej
 %%% @end
@@ -18,9 +18,11 @@
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
-
--define(IS_SELECT(K), (is_tuple(K) andalso element(1, K) == select)).
--define(IS_INDEX(K), K == first orelse K == last orelse is_integer(K) orelse ?IS_SELECT(K)).
+-define(IS_INDEX(K), 
+        ((K == first) orelse
+        (K == last) orelse 
+        (is_integer(K)) orelse
+        (is_tuple(K) andalso (element(1, K) == select)))).
 
 
 -type name()  :: binary() | string().
@@ -106,9 +108,27 @@ walk([N|Keys], [Target|_]) when is_tuple(Target), N == element(1, Target) ->
             walk(Keys, Value)
     end;
 
+
+% Target = Object: Name matches the first element of a tuple, continue with
+% the rest of the Names and the found Value.
+walk([N|Keys], #{}=M) when (not ?IS_INDEX(N)) ->
+    case maps:get(N, M, undefined) of
+        undefined -> undefined;
+        Value ->
+            case Keys of
+                [] -> 
+                    Value;
+                _More -> 
+                    walk(Keys, Value)
+            end
+    end;
+
+
+
+
 % Key is an array selector (index), and the first element isn't {name, value}, so
 % assuming valid JSON, we would have an Array, not an Object.
-walk([I|Keys], [Elt|_]=Target) when (not is_tuple(Elt)), ?IS_INDEX(I) ->
+walk([I|Keys], [Elt|_]=Target) when (not is_tuple(Elt)),  ?IS_INDEX(I) ->
     Element = index_to_element(I, Target),
     case Keys of
         [] ->
@@ -172,6 +192,10 @@ all_successes(Ks, [H|Tl]) ->
                   
 
             
+index_to_element({select, {K,V}}, [#{}|_]=L) ->
+    F = fun(Map) -> 
+                maps:get(K, Map, false) == V end,
+    lists:filter(F, L);
 index_to_element({select, {K,V}}, L) ->
     F = fun(PList) -> 
                 proplists:lookup(K, PList) == {K, V} end,
