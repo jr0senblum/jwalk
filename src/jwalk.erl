@@ -18,18 +18,20 @@
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
--define(IS_INDEX(K), 
+-define(IS_SELECTER(K), 
         ((K == first) orelse
-        (K == last) orelse 
-        (is_integer(K)) orelse
-        (is_tuple(K) andalso (element(1, K) == select)))).
+         (K == last) orelse 
+         is_integer(K) orelse
+         (is_tuple(K) andalso (element(1, K) == select)))).
 
 
--type name()  :: binary() | string().
--type value() :: binary() | string().
--type key()   :: {name(), value()} | 'first' | 'last' | non_neg_integer().
--type keys()  :: [key()].
--type obj()   :: map() | list().
+-type name()    :: binary() | string().
+-type value()   :: binary() | string().
+-type select()  :: {select, {name(), value()}}.
+-type keylist() :: name() | select() | 'first' | 'last' | non_neg_integer().
+-type keys()    :: {keylist()}.
+-type obj()     :: map() | list().
+
 -type jwalk_return() :: map() | list() | undefined | [] | no_return().
 
 
@@ -89,18 +91,20 @@ get(Keys, Obj) ->
 %% -----------------------------------------------------------------------------
 
 
-% Selecting a subset of an empty list is an empty list...
+% Selecting a subset of an empty list is an empty list.
 walk([{select, {_,_}}|_], []) ->
     [];
 
-% otherwise, it means we are udefined
+% Applying a Path to an empty list means the Path doesn't exist; thus undefined.
 walk(_, []) ->
     undefined;
 
-% Target = Object: Name matches the first element of a tuple, continue with
-% the rest of the Names and the found Value.
-walk([N|Keys], [Target|_]) when is_tuple(Target), N == element(1, Target) ->
-    Value = element(2, Target),
+% Any key applied to null is undefined.
+walk(_, null) -> undefined;
+
+% Target = [{k,v}..] = OBJECT: if Name matches Object's first Member's Name, 
+% continue with the rest of the keys and the found Value.
+walk([Name|Keys], [{Name, Value}|_]) when not ?IS_SELECTER(Name)->
     case Keys of
         [] -> 
             Value;
@@ -108,11 +112,10 @@ walk([N|Keys], [Target|_]) when is_tuple(Target), N == element(1, Target) ->
             walk(Keys, Value)
     end;
 
-
-% Target = Object: Name matches the first element of a tuple, continue with
-% the rest of the Names and the found Value.
-walk([N|Keys], #{}=M) when (not ?IS_INDEX(N)) ->
-    case maps:get(N, M, undefined) of
+% Target = map = OBJECT: if Name is a map-key, continue with the rest of the 
+% keys and the found Value.
+walk([Name|Keys], #{}=Object) when not ?IS_SELECTER(Name) ->
+    case maps:get(Name, Object, undefined) of
         undefined -> undefined;
         Value ->
             case Keys of
@@ -123,13 +126,19 @@ walk([N|Keys], #{}=M) when (not ?IS_INDEX(N)) ->
             end
     end;
 
+% Target is an OBJECT, but we have a selecter wanting an Array.
+walk([S|_], [{_,_}|_]=T) when ?IS_SELECTER(S)->
+    throw({index_for_non_list, T});
 
+% Target is a proplist representation of an OBJECT, but Keys could not be 
+% satisfied by Objects first Member, try the next Member. We don't have this 
+% use-case with Map representations because of the nature of maps:get/3.
+walk(Keys, [{_,_}|Tl]) ->
+    walk(Keys, Tl);
 
-
-% Key is an array selector (index), and the first element isn't {name, value}, so
-% assuming valid JSON, we would have an Array, not an Object.
-walk([I|Keys], [Elt|_]=Target) when (not is_tuple(Elt)),  ?IS_INDEX(I) ->
-    Element = index_to_element(I, Target),
+% Target is an ARRAY, access it via selector.
+walk([S|Keys], [_|_]=Array) when ?IS_SELECTER(S) ->
+    Element = selector_to_element(S, Array),
     case Keys of
         [] ->
             Element;
@@ -137,40 +146,35 @@ walk([I|Keys], [Elt|_]=Target) when (not is_tuple(Elt)),  ?IS_INDEX(I) ->
             walk(Keys, Element)
     end;
 
-% Key is an array selector (index), Target is either an Object or not a list.
-walk([I|_], T) when ?IS_INDEX(I) ->
+% Target is something other than an Array, but we have a selector.
+walk([S|_], T) when ?IS_SELECTER(S) ->
     throw({index_for_non_list, T});
 
-% Key is an array selector (index), but Target is null (missing value).
-walk([I|_], null) when ?IS_INDEX(I) ->
-    undefined;
-
-
-% We have a Name, and an Array, Name could be located in any object within the 
-% Array.
-walk([K|Ks], [Elt|_]=Ts) when (not is_tuple(Elt)) ->
-    Values = make_array(all_successes([K], Ts)),
-    case Ks of
+% Target is an ARRAY, key is a Name, return the subset of Objects from the 
+% Array that has a Member with the given Name.
+walk([Name|Keys], [_|_]=Ts) ->
+    Values = having_element(Name, Ts),
+    case Keys of
         [] ->
             Values;
         _More ->
-            walk(Ks, Values)
-    end;
+            walk(Keys, Values)
+    end.
                 
-% Any selecter applied to null is undefined.
-walk(_, null) -> undefined;
 
-% Path could not be satisfied by first element of list, try the next.
-walk(Keys, [_|Tl]) ->
-    walk(Keys, Tl).
+% Get all Elements from an Array that have a Member with the Name indicated by 
+% the Key.
+having_element(Key, Array) ->
+    Elements = [walk([Key], Obj) ||
+        Obj <- Array, not is_atom(Obj), not is_number(Obj)],
+    case Elements of
+        [] -> undefined;
+        _ -> dont_nest(Elements)
+    end.
 
 
-% Used to make sure we signal undefined or have an Array - used when trying to
-% get a subset of an Array of Objects, so that better be an Array.
-make_array([]) ->
-    undefined;
-
-make_array(H) ->
+% Make sure that serial {select, {_,_}} don't give us nested lists of returns.
+dont_nest(H) -> 
     A = lists:flatten(H),
     case A of
         [{_,_}|_]=Objs ->
@@ -179,44 +183,38 @@ make_array(H) ->
             A
     end.
 
-% Get all elements from an Array that have the target indicated by the Keys.
-all_successes(_Ks, []) ->
-    [];
-all_successes(Ks, [H|Tl]) ->
-    try walk(Ks, H) of
-        undefined -> [undefined|all_successes(Ks, Tl)];
-        Result -> [Result|all_successes(Ks, Tl)]
-    catch 
-        _:_ -> all_successes(Ks, Tl)
-    end.
-                  
-
             
-index_to_element({select, {K,V}}, [#{}|_]=L) ->
-    F = fun(Map) -> 
-                maps:get(K, Map, false) == V end,
+selector_to_element({select, {K,V}}, [#{}|_]=L) ->
+    F = fun(Map) -> maps:get(K, Map, false) == V end,
     lists:filter(F, L);
-index_to_element({select, {K,V}}, L) ->
-    F = fun(PList) -> 
-                proplists:lookup(K, PList) == {K, V} end,
+
+selector_to_element({select, {K,V}}, L) ->
+    F = fun(PList) -> proplists:lookup(K, PList) == {K, V} end,
     lists:filter(F, L);
-index_to_element(first, L) ->
+
+selector_to_element(first, L) ->
     hd(L);
-index_to_element(last, L) ->
+
+selector_to_element(last, L) ->
     lists:last(L);
-index_to_element(N, L)  ->
+
+selector_to_element(N, L)  ->
     lists:nth(N, L).
+
+
+
+to_binary_list(Keys) ->
+    L = tuple_to_list(Keys),
+    lists:map(fun(K) -> make_binary(K) end, L).
 
 
 make_binary(K) when is_binary(K); is_number(K) -> K;
 make_binary(K) when is_list(K) -> list_to_binary(K);
 make_binary(K) when is_atom(K) -> K;
-make_binary({select, {K, V}}) ->
+make_binary({select, {K, V}}) -> 
     {select, {make_binary(K), make_binary(V)}}.
 
-to_binary_list(Keys) ->
-    L = tuple_to_list(Keys),
-    lists:map(fun(K) -> make_binary(K) end, L).
+
 
                  
     
