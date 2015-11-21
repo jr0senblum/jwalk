@@ -11,7 +11,7 @@
 %%% ----------------------------------------------------------------------------
 -module(jwalk).
 
--export([get/2]).
+-export([get/2, get/3]).
 
 
 -ifdef(TEST).
@@ -49,12 +49,14 @@
 %% The Path list can consist of tuples representing a javascript-like 
 %% path: i.e.,
 %%
-%% Obj.cars.make.model would be expressed as {"cars","make","model"}, as in </br>
+%% Obj.cars.make.model would be expressed as {"cars","make","model"}, as in 
+%%
 %% jwalk:get({"cars","make","model"}, Obj).
 %%
-%% Additionally, the Path tuple can contain: </br>
+%% Additionally, the Path tuple can contain:
+%%
 %% Elements of a JSON array can be accessed by using the atoms `` 'first' '' and
-%% `` 'last' '' or an integer index </br>
+%% `` 'last' '' or an integer index
 %%
 %% A subset of JSON objects in an array can be selected using {select, {"name","value"}}
 %% For example
@@ -83,6 +85,20 @@ get(Keys, Obj) ->
         throw:R ->
             error(R)
     end.
+
+%% -----------------------------------------------------------------------------
+%% @doc Same as {@link get/2. get}, but returns default if undefined.
+%%
+-spec get(keys(), obj(), any()) -> jwalk_return().
+
+get(Keys, Obj, Default) ->
+    case get(Keys, Obj) of
+        undefined ->
+            Default;
+        Found ->
+            Found
+    end.
+
 
 
 
