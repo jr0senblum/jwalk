@@ -1,7 +1,7 @@
 # jwalk
 Helper module for working with Erlang proplist and map representations of JSON
 
-This work is a partial re-wrte of [[https://github.com/seth/ej][ej] but focuses 
+This work is a partial re-wrte of [[https://github.com/seth/ej][ej]] but focuses 
 on Map and Proplist representations of JSON like what is returned by
 [[https://github.com/sile/jsone][jsone]]. Quite frankly, I have lifted a lot of
 his verbiage and tried to follow his API.
