@@ -1,6 +1,6 @@
 {application, jwalk,
  [
-  {description, "An Erlang JSON Helper Library"},
+  {description, "Helper module for working with Erlang proplist and map representations of JSON"},
   {vsn, git},
   {registered, []},
   {applications, [

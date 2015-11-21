@@ -8,11 +8,32 @@ his verbiage and tried to follow his API.
 
 Currently, ``jwalk:get/2`` has been implemented and supports both proplists and maps.
 In jwalk, paths into JSON objects are expressed using a tuple of keys
-like so:
 
-Javascript: Obj.author.name.first
+The Path component can consist of tuples representing a javascript-like 
+path: i.e.,
+``Obj.cars.make.model``  would be expressed as ``{"cars","make","model"}`` , as in
+``jwalk:get({"cars","make","model"}, Obj)``.
 
-Jwalk:    jwalk:get({"author", "name", "first"}, Obj)
+Additionally, the Path tuple can contain: </br>
+* An integer index: Elements of a JSON ARRAY can be accessed by using the atoms
+``first`` and ``last``
+* A subset of JSON objects in an ARRAY can be selected using ``{select, {"name","value"}}``
+
+For example
+
+	Cars = [{<<"cars">>, [ [{<<"color">>, <<"white">>}, {<<"age">>, <<"old">>}],
+                           [{<<"color">>, <<"red">>},  {<<"age">>, <<"old">>}],
+                           [{<<"color">>, <<"blue">>}, {<<"age">>, <<"new">>}]
+                         ]
+           }].
+
+ Then 
+
+	1> jwalk:get({"cars", {select {"age", "old"}}}, Cars).
+	 [ [{<<"color">>, <<"white">>}, {<<"age">>, <<"old">>}],
+       [{<<"color">>, <<"red">>},   {<<"age">>, <<"old">>}]
+     ]
+
 
 Given:
 

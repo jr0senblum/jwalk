@@ -33,7 +33,7 @@
 -type obj()     :: map() | list().
 
 -type jwalk_return() :: map() | list() | undefined | [] | no_return().
-
+-export_type ([jwalk_return/0]).
 
 %% ----------------------------------------------------------------------------
 %% API
