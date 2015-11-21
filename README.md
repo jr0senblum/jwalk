@@ -15,8 +15,8 @@ path: i.e.,
 ``jwalk:get({"cars","make","model"}, Obj)``.
 
 Additionally, the Path tuple can contain: </br>
-* An integer index: Elements of a JSON ARRAY can be accessed by using the atoms
-``first`` and ``last``
+* An integer index: Elements of a JSON ARRAY can be accessed by using an integer
+index or the atoms ``first`` and ``last``
 * A subset of JSON objects in an ARRAY can be selected using ``{select, {"name","value"}}``
 
 For example
@@ -75,10 +75,8 @@ or
               [{<<"value">>,<<"Close">>},
                {<<"onclick">>,<<"CloseDoc()">>}]]},
             {<<"titleitem">>, []}]}]}].
-
-	%
-    % Using jwalk:get(Paths, Object)
-    %
+then: using jwalk:get(Paths, Object)
+    
     1> jwalk:get({"widget"}, Obj).
     {<<"debug">> => <<"on">>,
      <<"image">> => #{<<"alignment">> => <<"center">>,
