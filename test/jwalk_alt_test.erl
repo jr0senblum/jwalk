@@ -188,7 +188,7 @@ jwalk_alt_test_() ->
                    Widget1 = jwalk:set(Path, Widget, Value),
                    ?assertEqual(Value, jwalk:get(Path, Widget1))
            end},
-          {"ej:set, missing intermediate path",
+          {"jwalk:set, missing intermediate path",
            fun() ->
                    Path = {"widget", "middle", "nOffset"},
                    Value = <<"YYY">>,
@@ -230,7 +230,7 @@ jwalk_alt_test_() ->
                    Reset = jwalk:set({"menu", "popup", "menuitem", 2}, Menu1, Orig),
                    ?assertEqual(Menu, Reset)
            end},
-          {"ej:set list element path",
+          {"jwalk:set list element path",
            fun() ->
                    Path = {"menu", "popup", "menuitem", 2, "onclick"},
                    Orig = jwalk:get(Path, Menu),
@@ -239,10 +239,27 @@ jwalk_alt_test_() ->
                    ?assertEqual(New, jwalk:get(Path, Menu1)),
                    Reset = jwalk:set(Path, Menu1, Orig),
                    ?assertEqual(Menu, Reset)
+           end},
+          {"jwalk:set list element path first, last",
+           fun() ->
+                   FPath = {"menu", "popup", "menuitem", first, "value"},
+                   LPath = {"menu", "popup", "menuitem", last, "value"},
+                   FMenu = jwalk:set(FPath, Menu, <<"create">>),
+                   LMenu = jwalk:set(LPath, FMenu, <<"kill">>),
+                   ?assertEqual(<<"create">>, jwalk:get(FPath, FMenu)),
+                   ?assertEqual(<<"create">>, jwalk:get(FPath, LMenu)),
+                   ?assertEqual(<<"kill">>, jwalk:get(LPath, LMenu))
+           end},
+
+          {"jwalk:set new list element",
+           fun() ->
+                   Path = {"menu", "popup", "menuitem", new},
+                   Path1 = {"menu", "popup", "menuitem", first},
+                   Menu1 = jwalk:set(Path, Menu, <<"first-item">>),
+                   ?assertEqual(<<"first-item">>, jwalk:get(Path1, Menu1)),
+                   List = jwalk:get({"menu", "popup", "menuitem"}, Menu1),
+                   ?assertEqual(4, length(List))
            end}
-
-
-
          ]
  end
 }.

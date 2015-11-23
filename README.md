@@ -6,7 +6,8 @@ on Map and Proplist representations of JSON like what is returned by
 [jsone](https://github.com/sile/jsone). Quite frankly, I have lifted a lot of
 his verbiage and tried to follow his API.
 
-Currently, ``jwalk:get/2`` has been implemented and supports both proplists and maps.
+Currently, ``jwalk:get/2``, ``jwalk:get/3``, and ``jwalk:set/2`` have been 
+implemented and support both proplists and maps.
 In jwalk, paths into JSON objects are expressed using a tuple of keys
 
 The Path component can consist of tuples representing a javascript-like 
@@ -114,6 +115,58 @@ then: using jwalk:get(Paths, Object)
 	5> jwalk:get({"menu", "popup","menuitem",{select,{"value","New"}},"onclick"},Obj2).
 	[<<"CreateNewDoc()">>]
 
+        6> Path = {"widget","image","newOffset"}.
+        {"widget","image","newOffset"}
+
+        7> Widget = 
+        #{<<"widget">> => #{<<"debug">> => <<"on">>,
+          <<"image">> => #{<<"alignment">> => <<"center">>,
+          <<"hOffset">> => 250,
+          <<"name">> => <<"sun1">>,
+          <<"src">> => <<"Images/Sun.png">>,
+          <<"vOffset">> => 250},
+          <<"keys">> => [],
+          <<"text">> => #{<<"alignment">> => <<"center">>,
+          <<"data">> => <<"Click Here">>,
+          <<"hOffset">> => 250,
+          <<"name">> => <<"text1">>,
+          <<"onMouseUp">> => <<"sun1.opacity = (sun1.opacity / 100) * 90;">>,
+          <<"size">> => 36,
+          <<"style">> => <<"bold">>,
+          <<"vOffset">> => 100},
+          <<"values">> => [1,2,3,4,5],
+          <<"version">> => <<"1">>,
+          <<"window">> => #{<<"height">> => 500,
+          <<"name">> => <<"main_window">>,
+          <<"title">> => <<"Sample Konfabulator Widget">>,
+          <<"width">> => 500}}}.
+
+          8> Value = <<"YYY">>.
+          <<"YYY">>
+          
+          9> jwalk:set(Path, Widget, Value).
+        #{<<"widget">> => #{<<"debug">> => <<"on">>,
+          <<"image">> => #{<<"alignment">> => <<"center">>,
+          <<"hOffset">> => 250,
+          <<"name">> => <<"sun1">>,
+          <<"newOffset">> => <<"YYY">>
+          <<"src">> => <<"Images/Sun.png">>,
+          <<"vOffset">> => 250},
+          <<"keys">> => [],
+          <<"text">> => #{<<"alignment">> => <<"center">>,
+          <<"data">> => <<"Click Here">>,
+          <<"hOffset">> => 250,
+          <<"name">> => <<"text1">>,
+          <<"onMouseUp">> => <<"sun1.opacity = (sun1.opacity / 100) * 90;">>,
+          <<"size">> => 36,
+          <<"style">> => <<"bold">>,
+          <<"vOffset">> => 100},
+          <<"values">> => [1,2,3,4,5],
+          <<"version">> => <<"1">>,
+          <<"window">> => #{<<"height">> => 500,
+          <<"name">> => <<"main_window">>,
+          <<"title">> => <<"Sample Konfabulator Widget">>,
+          <<"width">> => 500}}}.
 
 
 

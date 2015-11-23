@@ -23,7 +23,7 @@
 
 -define(IS_OBJ(X), is_map(X) orelse (is_list(X) andalso is_tuple(hd(X)))).
 
--define(IS_SELECTER(K), 
+-define(IS_SELECTOR(K), 
         ((K == first) orelse
          (K == last) orelse 
          is_integer(K) orelse
@@ -130,7 +130,7 @@ walk(_, null) -> undefined;
 
 % Target = [{k,v}..] = OBJECT: if Name matches Object's first Member's Name, 
 % continue with the rest of the keys and the found Value.
-walk([Name|Keys], [{Name, Value}|_]) when not ?IS_SELECTER(Name)->
+walk([Name|Keys], [{Name, Value}|_]) when not ?IS_SELECTOR(Name)->
     case Keys of
         [] -> 
             Value;
@@ -140,7 +140,7 @@ walk([Name|Keys], [{Name, Value}|_]) when not ?IS_SELECTER(Name)->
 
 % Target = map = OBJECT: if Name is a map-key, continue with the rest of the 
 % keys and the found Value.
-walk([Name|Keys], #{}=Object) when not ?IS_SELECTER(Name) ->
+walk([Name|Keys], #{}=Object) when not ?IS_SELECTOR(Name) ->
     case maps:get(Name, Object, undefined) of
         undefined -> undefined;
         Value ->
@@ -152,8 +152,8 @@ walk([Name|Keys], #{}=Object) when not ?IS_SELECTER(Name) ->
             end
     end;
 
-% Target is an OBJECT, but we have a selecter wanting an Array.
-walk([S|_], [{_,_}|_]=T) when ?IS_SELECTER(S)->
+% Target is an OBJECT, but we have a selector wanting an Array.
+walk([S|_], [{_,_}|_]=T) when ?IS_SELECTOR(S)->
     throw({index_for_non_list, T});
 
 % Target is a proplist representation of an OBJECT, but Keys could not be 
@@ -163,7 +163,7 @@ walk(Keys, [{_,_}|Tl]) ->
     walk(Keys, Tl);
 
 % Target is an ARRAY, access it via selector.
-walk([S|Keys], [_|_]=Array) when ?IS_SELECTER(S) ->
+walk([S|Keys], [_|_]=Array) when ?IS_SELECTOR(S) ->
     Element = selector_to_element(S, Array),
     case Keys of
         [] ->
@@ -173,11 +173,11 @@ walk([S|Keys], [_|_]=Array) when ?IS_SELECTER(S) ->
     end;
 
 % Target is something other than an Array, but we have a selector.
-walk([S|_], T) when ?IS_SELECTER(S) ->
+walk([S|_], T) when ?IS_SELECTOR(S) ->
     throw({index_for_non_list, T});
 
-% Target is an ARRAY, key is a Name, return the subset of Objects from the 
-% Array that has a Member with the given Name.
+% Target is an ARRAY, key is a Name, return the subset of Values from the Objects
+% in the array with Member {Name, Value}
 walk([Name|Keys], [_|_]=Ts) ->
     Values = having_element(Name, Ts),
     case Keys of
@@ -187,11 +187,7 @@ walk([Name|Keys], [_|_]=Ts) ->
             walk(Keys, Values)
     end.
                 
-
-
-% Get all Elements from an Array that have a Member with the Name indicated by 
-% the Key. If we can find the Element in an object, then the object gets 
-% added to the return list.
+% Return an Array of Values from an Array of Objects that have {Key, Values}.
 having_element(Key, Array) ->
     Elements = [walk([Key], Obj) || Obj <- Array, ?IS_OBJ(Obj)],
     case Elements of
@@ -200,8 +196,7 @@ having_element(Key, Array) ->
     end.
 
 
-
-% Make sure that serial {select, {_,_}} doesn't give us nested lists of returns.
+% Make sure that we always return an Array of Objects.
 dont_nest(H) -> 
     A = lists:flatten(H),
     case A of
@@ -213,7 +208,7 @@ dont_nest(H) ->
 
             
 selector_to_element({select, {K,V}}, [#{}|_]=L) ->
-    F = fun(Map) -> maps:get(K, Map, false) == V end,
+    F = fun(Map) -> maps:get(K, Map, jwalk_false) == V end,
     lists:filter(F, L);
 
 selector_to_element({select, {K,V}}, L) ->
@@ -231,53 +226,79 @@ selector_to_element(N, L)  ->
 
 
 
+% Last part of the Path, if it exists replace it; else create it.
+set_([Name], #{}=M, V, _Acc) when not ?IS_SELECTOR(Name)->
+    maps:put(Name, V, M);
+
 % Found the last part of the Path in an OBJECT, replace the value with Element.
-set_([Name], [{Name, _V}|Tl], Element, Acc) when not ?IS_SELECTER(Name)->
+set_([Name], [{Name, _V}|Tl], Element, Acc) when not ?IS_SELECTOR(Name)->
     lists:flatten(lists:reverse(Acc),[{Name, Element}|Tl]);
 
 % Member with Name doesn't exist in OBJECT, create Member.
-set_([Name], [], Element, Acc) when not ?IS_SELECTER(Name)->
+set_([Name], [], Element, Acc) when not ?IS_SELECTOR(Name)->
     lists:flatten(lists:reverse(Acc),[{Name, Element}]);
 
 % Intermediate Path element does not exist.
-set_([Name|_]=Path, [], _Element, _Acc) when not ?IS_SELECTER(Name)->
-    throw({no_path, Path});
+set_([Name|_], [], _Element, _Acc) when not ?IS_SELECTOR(Name)->
+    throw({no_path, Name});
+
+
+% Look for an OBJECT's Member on the Path, that Member's Value will be the result 
+% of the recursive call of set_ on its Value with the ballance of the Path.
+set_([Name|Ks], #{}=M, Element, _Acc) when not ?IS_SELECTOR(Name)->
+    case maps:get(Name, M, not_found) of
+        not_found -> 
+            throw({no_path, Name});
+        Value -> 
+            New = set_(Ks, Value, Element, []),
+            maps:put(Name, New,M)
+    end;
 
 % Found an OBJECT's Member on the Path, that Member's Value will be the result 
 % of the recursive call of set_ on its Value with the ballance of the Path.
-set_([Name|Ks], [{Name, V}|Tl], Element, Acc) when not ?IS_SELECTER(Name)->
+set_([Name|Ks], [{Name, V}|Tl], Element, Acc) when not ?IS_SELECTOR(Name)->
     New = set_(Ks, V, Element, []),
     lists:flatten(lists:reverse(Acc),[{Name, New}|Tl]);
 
 % This OBJECT's head Member isn't relevant, try with the next Member
-set_([Name|_]=Ks, [{N, V}|Tl], Element, Acc) when not ?IS_SELECTER(Name)->
+set_([Name|_]=Ks, [{N, V}|Tl], Element, Acc) when not ?IS_SELECTOR(Name)->
     set_(Ks, Tl, Element, [{N,V}|Acc]);
 
 
+% The atom, new, applied to an ARRAY creates Element as the first element in Array.
+set_([new], [_|_]=Array, Element, Acc)->
+    NewArray = [Element|Array],
+    [Result] = [NewArray|Acc],
+    Result;
 
-% The path element is a select_by_member applied to an ARRAY. 
-% If this is the last Path element, Add the Member to selected objects; 
-% otherwise, replace the selected Objects with the recursive set_
-set_([{select,{_, _}}=S|R], [O|_Os]=Array, Obj, Acc) when ?IS_OBJ(O) ->
+% The final path element is a select_by_member applied to an ARRAY. Set the 
+% selected elements to the Object element.
+set_([{select,_}=S], [O|_Os]=Array, Obj, Acc) when ?IS_OBJ(O) ->
     Objects = selector_to_element(S, Array),
-    Replaced = case R of
-                   [] ->
-                       case Obj of
-                           {K,V} -> 
-                               O2 = remove_member(Objects, Obj),
-                               add_member(O2, {K,V});
-                           NotObj ->
-                               throw({replacing_object_with_value,NotObj})
-                       end;
-                   _more -> 
-                       set_(R, Objects, Obj, [])
+    Replaced = case Obj of
+                   Obj when is_tuple(Obj) ->
+                       O2 = remove_member(Objects, Obj),
+                       add_member(O2, Obj);
+                   NotObj ->
+                       throw({replacing_object_with_value,NotObj})
                end,
     NewArray = remove(Array, Objects) ++ Replaced,
     [Result] = [lists:reverse(NewArray)|Acc], 
     Result;
-            
 
-% The final part of the path is an index, replace the target.
+% The path element is a select_by_member applied to an ARRAY, replace the 
+% selected Objects with the recursive set_ on the rest of the path and
+% the slected elements.
+set_([{select,_}=S|Ks], [O|_Os]=Array, Obj, Acc) when ?IS_OBJ(O) ->
+    Objects = selector_to_element(S, Array),
+    Replaced = set_(Ks, Objects, Obj, []),
+    
+    NewArray = remove(Array, Objects) ++ Replaced,
+    [Result] = [lists:reverse(NewArray)|Acc], 
+    Result;
+
+% Path component is an index, either recurse on the selected Object, or replace
+% it.
 set_([S | R], Array, Element, _Acc) when is_integer(S); S == last; S == first ->
     N = case S of 
             first -> 1;
@@ -295,6 +316,26 @@ set_([S | R], Array, Element, _Acc) when is_integer(S); S == last; S == first ->
                 lists:sublist(Array, N + 1, length(Array))
     end;
 
+
+
+% Final Path component is a Name, target is an ARRAY, replace/add 
+% Member to all selected Objects pulled form the Array.
+set_([Name], [_|_]=Array, Element, Acc) ->
+    case having_element(Name, Array) of
+        [undefined] -> % create and pretend it was always there
+            [NewArray] = add_member(Array, {Name, Element}),
+            [NewArray|Acc];
+        ObjectSet -> 
+            case ?IS_OBJ(Element) of 
+                true ->
+                    [NewArray] = add_member(remove(Array, ObjectSet), Element),
+                    [Result] = [NewArray|Acc],
+                    Result;
+                false ->
+                    throw({replacing_object_with_value, Element})
+            end
+    end;
+
 % Path component is a Name, target is an ARRAY,  Set will recursively 
 % processes the selected objects containing a Member with name Name,
 % with the ballance of the Path. If the Member isn't found, it will
@@ -302,27 +343,14 @@ set_([S | R], Array, Element, _Acc) when is_integer(S); S == last; S == first ->
 set_([Name|Keys]=Ks, [_|_]=Array, Element, Acc) ->
     case having_element(Name, Array) of
         [undefined] -> % create and pretend it was always there
-            [NewArray] = [Object ++ [{Name, Element}] || Object<-Array],
-            case Keys of
-                [] ->[NewArray|Acc];
-                _ -> set_(Ks, [NewArray], Element, Acc)
-            end;
+            [NewArray] = add_member(Array, {Name, Element}),
+            set_(Ks, [NewArray], Element, Acc);
         ObjectSet -> 
-            case Keys of 
-                [] when ?IS_OBJ(Element) ->
-                    NewArray = remove(Array, ObjectSet) ++ [Element],
-                    [Result] = [NewArray|Acc],
-                    Result;
-                [] ->
-                    throw({replacing_object_with_value, Element});
-                _More ->
-                    NewObjSet = set_(Keys, ObjectSet, Element, []),
-                    NewArray = remove(Array,ObjectSet) ++ NewObjSet,
-                    [Result] = [NewArray|Acc],
-                    Result
-            end
+            NewObjSet = set_(Keys, ObjectSet, Element, []),
+            NewArray = add_member(remove(Array,ObjectSet), NewObjSet),
+            [Result] = [NewArray|Acc],
+            Result
     end.
-
 
 
 to_binary_list(Keys) ->
@@ -337,20 +365,20 @@ make_binary({select, {K, V}}) ->
     {select, {make_binary(K), make_binary(V)}}.
 
 
+add_member([#{}|_] = Maps, {K,V}) ->
+    [maps:put(K, V, M) || M <- Maps];
+
 add_member(Objects, M) ->
     [lists:flatten([O,M]) || 
         O <- lists:reverse(Objects)].
 
+remove_member([#{}|_]=Maps, {K, _V}) ->
+    [maps:remove(K, Map) || Map <- Maps];
 remove_member(Objects, {K, _V}) ->
     [proplists:delete(K, L) || L <- Objects].
 
-replace_member(Objects, {Name, NewValue}) ->
-    F = fun({N, _}) when N == Name -> {Name, NewValue};
-           (Other) -> Other
-        end,
-    [lists:map(F, O) || O <- Objects].
 
-                 
+
 remove(Objects, Remove) ->
     ordsets:to_list(
       ordsets:subtract(ordsets:from_list(Objects),
