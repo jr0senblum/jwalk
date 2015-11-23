@@ -2,24 +2,24 @@
 %%% @author Jim Rosenblum <jrosenblum@prodigy.net>
 %%% @copyright (C) 2015, Jim Rosenblum
 %%% @doc
-%%% The jwalk modue is intended to make it easy to work with the Erlang
-%%% encodings of JSON which return either MAPS or PROPERTY lists. 
+%%% The jwalk modue is intended to make it easier to work with Erlang
+%%% encodings of JSON - either MAPS or PROPERTY lists. 
 %%%
 %%% This work is really a rip-off of https://github.com/seth/ej
-%%% Currently get/2 and get/3 are supported which allows one to walk a
-%%% structure and return a particular value.
+%%% Currently get/2, get/3 and set/3 are supported.
 %%% @end
-%%% Created : 20 Nov 2015 by Jim Rosenblum <jrosenblum@Jims-MBP.attlocal.net>
+%%% Created : 20 Nov 2015 by Jim Rosenblum <jrosenblum@prodigy.net>
 %%% ----------------------------------------------------------------------------
 -module(jwalk).
 
 -export([get/2, get/3,
-        set/3]).
+         set/3]).
 
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -endif.
+
 
 -define(IS_OBJ(X), is_map(X) orelse (is_list(X) andalso is_tuple(hd(X)))).
 
@@ -35,9 +35,10 @@
 -type select()  :: {select, {name(), value()}}.
 -type keylist() :: name() | select() | 'first' | 'last' | non_neg_integer().
 -type keys()    :: {keylist()}.
--type obj()     :: map() | list().
+-type obj()     :: map() | list(tuple()).
 
--type jwalk_return() :: map() | list() | undefined | [] | no_return().
+-type jwalk_return() :: map() | obj() | [map()] | [obj()] | undefined.
+
 -export_type ([jwalk_return/0]).
 
 %% ----------------------------------------------------------------------------
@@ -46,20 +47,23 @@
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Get takes a Path list and a strcture representing the encoded JSON.
-%% The Path list can consist of tuples representing a javascript-like 
-%% path: i.e.,
+%% @doc Return a value from 'Obj'
+%% Get takes a tuple where the elements represent a Path into a JSON Objects
+%% and an encoded JSON structure (proplist or map) and returns the value 
+%% indicated by the Path.
+%%
+%% The Path components are tuples representing a javascript-like, path: i.e.,
 %%
 %% Obj.cars.make.model would be expressed as {"cars","make","model"}, as in 
 %%
 %% jwalk:get({"cars","make","model"}, Obj).
 %%
-%% Additionally, the Path tuple can contain:
+%% Additionally, a Path element may contain:
 %%
-%% Elements of a JSON array can be accessed by using the atoms `` 'first' '' and
-%% `` 'last' '' or an integer index
+%% The atoms `` 'first' '' and `` 'last' '' or an integer index indicating an 
+%% elements from a JSON array; or,
 %%
-%% A subset of JSON objects in an array can be selected using {select, {"name","value"}}
+%% A subset of JSON objects in an Array can be selected using {select, {"name","value"}}
 %% For example
 %% ```
 %% Cars = [{<<"cars">>, [ [{<<"color">>, <<"white">>}, {<<"age">>, <<"old">>}],
@@ -75,6 +79,7 @@
 %%  [ [{<<"color">>, <<"white">>}, {<<"age">>, <<"old">>}],
 %%    [{<<"color">>, <<"red">>},   {<<"age">>, <<"old">>}]
 %% ]
+%% '''
 %% 
 -spec get(keys(), obj()) -> jwalk_return().
 
@@ -85,6 +90,7 @@ get(Keys, Obj) ->
         throw:R ->
             error(R)
     end.
+
 
 
 %% -----------------------------------------------------------------------------
@@ -101,6 +107,11 @@ get(Keys, Obj, Default) ->
     end.
 
 
+%% -----------------------------------------------------------------------------
+%% @doc Set a value in `Obj'
+%% Replaces the value at the path specified by `Keys' with `Value' and
+%% returns the new structure. 
+%%
 -spec set(keys(), obj(), value()) -> jwalk_return().
 
 set(Keys, Obj, Element) ->
@@ -111,6 +122,8 @@ set(Keys, Obj, Element) ->
             error(R)
     end.
 
+
+
 %% -----------------------------------------------------------------------------
 %%                INTERNAL FUNCTIONS
 %% -----------------------------------------------------------------------------
@@ -119,7 +132,6 @@ set(Keys, Obj, Element) ->
 % Selecting a subset of an empty list is an empty list.
 walk([{select, {_,_}}|_], []) ->
     [];
-
 
 % Applying a Path to an empty list means the Path doesn't exist; thus undefined.
 walk(_, []) ->
@@ -153,8 +165,8 @@ walk([Name|Keys], #{}=Object) when not ?IS_SELECTOR(Name) ->
     end;
 
 % Target is an OBJECT, but we have a selector wanting an Array.
-walk([S|_], [{_,_}|_]=T) when ?IS_SELECTOR(S)->
-    throw({index_for_non_list, T});
+walk([S|_], Obj) when ?IS_SELECTOR(S), ?IS_OBJ(Obj)->
+    throw({index_for_non_list, Obj});
 
 % Target is a proplist representation of an OBJECT, but Keys could not be 
 % satisfied by Objects first Member, try the next Member. We don't have this 
@@ -162,7 +174,8 @@ walk([S|_], [{_,_}|_]=T) when ?IS_SELECTOR(S)->
 walk(Keys, [{_,_}|Tl]) ->
     walk(Keys, Tl);
 
-% Target is an ARRAY, access it via selector.
+% Target is an ARRAY, access it via selector. Target can't be an Object or 
+% previous clauses would have matched.
 walk([S|Keys], [_|_]=Array) when ?IS_SELECTOR(S) ->
     Element = selector_to_element(S, Array),
     case Keys of
@@ -172,12 +185,12 @@ walk([S|Keys], [_|_]=Array) when ?IS_SELECTOR(S) ->
             walk(Keys, Element)
     end;
 
-% Target is something other than an Array, but we have a selector.
+% Target is something other than an ARRAY, but we have a selector.
 walk([S|_], T) when ?IS_SELECTOR(S) ->
     throw({index_for_non_list, T});
 
-% Target is an ARRAY, key is a Name, return the subset of Values from the Objects
-% in the array with Member {Name, Value}
+% Target is an ARRAY, key is a Name, return the subset of Values from the Object
+% Array where {Name, Value} is Member in an Object in the Array.
 walk([Name|Keys], [_|_]=Ts) ->
     Values = having_element(Name, Ts),
     case Keys of
@@ -187,46 +200,9 @@ walk([Name|Keys], [_|_]=Ts) ->
             walk(Keys, Values)
     end.
                 
-% Return an Array of Values from an Array of Objects that have {Key, Values}.
-having_element(Key, Array) ->
-    Elements = [walk([Key], Obj) || Obj <- Array, ?IS_OBJ(Obj)],
-    case Elements of
-        [] -> undefined;
-        _ -> dont_nest(Elements)
-    end.
 
 
-% Make sure that we always return an Array of Objects.
-dont_nest(H) -> 
-    A = lists:flatten(H),
-    case A of
-        [{_,_}|_]=Objs ->
-            [Objs];
-        _ ->
-            A
-    end.
-
-            
-selector_to_element({select, {K,V}}, [#{}|_]=L) ->
-    F = fun(Map) -> maps:get(K, Map, jwalk_false) == V end,
-    lists:filter(F, L);
-
-selector_to_element({select, {K,V}}, L) ->
-    F = fun(PList) -> proplists:lookup(K, PList) == {K, V} end,
-    lists:filter(F, L);
-
-selector_to_element(first, L) ->
-    hd(L);
-
-selector_to_element(last, L) ->
-    lists:last(L);
-
-selector_to_element(N, L)  ->
-    lists:nth(N, L).
-
-
-
-% Last part of the Path, if it exists replace it; else create it.
+% Last part of the Path found, if it exists in the OBJECT replace it; else create it.
 set_([Name], #{}=M, V, _Acc) when not ?IS_SELECTOR(Name)->
     maps:put(Name, V, M);
 
@@ -234,7 +210,7 @@ set_([Name], #{}=M, V, _Acc) when not ?IS_SELECTOR(Name)->
 set_([Name], [{Name, _V}|Tl], Element, Acc) when not ?IS_SELECTOR(Name)->
     lists:flatten(lists:reverse(Acc),[{Name, Element}|Tl]);
 
-% Member with Name doesn't exist in OBJECT, create Member.
+% Could not find the Member with Name in OBJECT, create Member (proplist).
 set_([Name], [], Element, Acc) when not ?IS_SELECTOR(Name)->
     lists:flatten(lists:reverse(Acc),[{Name, Element}]);
 
@@ -242,9 +218,8 @@ set_([Name], [], Element, Acc) when not ?IS_SELECTOR(Name)->
 set_([Name|_], [], _Element, _Acc) when not ?IS_SELECTOR(Name)->
     throw({no_path, Name});
 
-
-% Look for an OBJECT's Member on the Path, that Member's Value will be the result 
-% of the recursive call of set_ on its Value with the ballance of the Path.
+% See if Path element is a Member of the  OBJECT. If so, its Value will be the result 
+% of the recursive call of set_ on the Value with the ballance of the Path.
 set_([Name|Ks], #{}=M, Element, _Acc) when not ?IS_SELECTOR(Name)->
     case maps:get(Name, M, not_found) of
         not_found -> 
@@ -316,8 +291,6 @@ set_([S | R], Array, Element, _Acc) when is_integer(S); S == last; S == first ->
                 lists:sublist(Array, N + 1, length(Array))
     end;
 
-
-
 % Final Path component is a Name, target is an ARRAY, replace/add 
 % Member to all selected Objects pulled form the Array.
 set_([Name], [_|_]=Array, Element, Acc) ->
@@ -353,16 +326,6 @@ set_([Name|Keys]=Ks, [_|_]=Array, Element, Acc) ->
     end.
 
 
-to_binary_list(Keys) ->
-    L = tuple_to_list(Keys),
-    lists:map(fun(K) -> make_binary(K) end, L).
-
-
-make_binary(K) when is_binary(K); is_number(K) -> K;
-make_binary(K) when is_list(K) -> list_to_binary(K);
-make_binary(K) when is_atom(K) -> K;
-make_binary({select, {K, V}}) -> 
-    {select, {make_binary(K), make_binary(V)}}.
 
 
 add_member([#{}|_] = Maps, {K,V}) ->
@@ -372,11 +335,12 @@ add_member(Objects, M) ->
     [lists:flatten([O,M]) || 
         O <- lists:reverse(Objects)].
 
+
+
 remove_member([#{}|_]=Maps, {K, _V}) ->
     [maps:remove(K, Map) || Map <- Maps];
 remove_member(Objects, {K, _V}) ->
     [proplists:delete(K, L) || L <- Objects].
-
 
 
 remove(Objects, Remove) ->
@@ -385,6 +349,51 @@ remove(Objects, Remove) ->
                        ordsets:from_list(Remove))).
 
           
-    
-    
+% Return a list of Values from an Array of Objects that have {Key, Values}.
+having_element(Key, Array) ->
+    Elements = [walk([Key], Obj) || Obj <- Array, ?IS_OBJ(Obj)],
+    case Elements of
+        [] -> undefined;
+        _ -> dont_nest(Elements)
+    end.
+
+% Make sure that we always return an Array of Objects.
+dont_nest(H) -> 
+    A = lists:flatten(H),
+    case A of
+        [{_,_}|_]=Objs ->
+            [Objs];
+        _ ->
+            A
+    end.
+
+            
+selector_to_element({select, {K,V}}, [#{}|_]=L) ->
+    F = fun(Map) -> maps:get(K, Map, jwalk_false) == V end,
+    lists:filter(F, L);
+
+selector_to_element({select, {K,V}}, L) ->
+    F = fun(PList) -> proplists:lookup(K, PList) == {K, V} end,
+    lists:filter(F, L);
+
+selector_to_element(first, L) ->
+    hd(L);
+
+selector_to_element(last, L) ->
+    lists:last(L);
+
+selector_to_element(N, L)  ->
+    lists:nth(N, L).
+
+
+to_binary_list(Keys) ->
+    L = tuple_to_list(Keys),
+    lists:map(fun(K) -> make_binary(K) end, L).
+
+make_binary(K) when is_binary(K); is_number(K) -> K;
+make_binary(K) when is_list(K) -> list_to_binary(K);
+make_binary(K) when is_atom(K) -> K;
+make_binary({select, {K, V}}) -> 
+    {select, {make_binary(K), make_binary(V)}}.
+
 
