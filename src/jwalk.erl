@@ -111,7 +111,9 @@ get(Keys, Obj, Default) ->
 %% -----------------------------------------------------------------------------
 %% @doc Set a value in `Obj'
 %% Replaces the value at the path specified by `Keys' with `Value' and
-%% returns the new structure. 
+%% returns the new structure. If the final element of the Path, does not exist,
+%% it will be created. The atom, new, applied to an ARRAY, will create the Element 
+%% as the first element in the Array.
 %%
 -spec set(keys(), obj(), value()) -> jwalk_return().
 
@@ -125,9 +127,8 @@ set(Keys, Obj, Element) ->
     end.
 
 %% -----------------------------------------------------------------------------
-%% @doc Set a value in `Obj' creating intermediary Elements if necessary.
-%% Replaces the value at the path specified by `Keys' with `Value' and
-%% returns the new structure.
+%% @doc Set a value in `Obj' same as set/3, but creats intermediary Elements 
+%% if necessary.
 %%
 -spec set_p(keys(), obj(), value()) -> jwalk_return().
 

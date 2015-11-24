@@ -3,21 +3,22 @@
 
 This work is a partial re-wrte of [ej](https://github.com/seth/ej) but focuses 
 on Map and Proplist representations of JSON like what is returned by
-[jsone](https://github.com/sile/jsone). Quite frankly, I have lifted a lot of
+[jsone](https://github.com/sile/jsone). I have lifted a lot of
 his verbiage and tried to follow his API.
 
 Currently, ``jwalk:get/2``, ``jwalk:get/3``, and ``jwalk:set/2`` and
 ``jwalk:set_p/2`` have been implemented and support both proplists and maps.
-In jwalk, paths into JSON objects are expressed using a tuple of keys
 
-The Path component can consist of tuples representing a javascript-like 
+In jwalk, paths into JSON objects are expressed using a tuple of keys or Path elements.
+
+The Path elements can be thought of as a tuple represention of a javascript-like 
 path: i.e.,
 ``Obj.cars.make.model``  would be expressed as ``{"cars","make","model"}`` , as in
 ``jwalk:get({"cars","make","model"}, Obj)``.
 
-Additionally, the Path tuple can contain: </br>
-* An integer index: Elements of a JSON ARRAY can be accessed by using an integer
-index or the atoms ``first`` and ``last``
+In addition to Names, a Path elemente can be: </br>
+* An integer index or ``first`` and ``last``: Elements of a JSON ARRAY can be accessed 
+by using an integer index or the atoms ``first`` and ``last``
 * A subset of JSON objects in an ARRAY can be selected using ``{select, {"name","value"}}``
 
 For example
@@ -76,6 +77,7 @@ or
               [{<<"value">>,<<"Close">>},
                {<<"onclick">>,<<"CloseDoc()">>}]]},
             {<<"titleitem">>, []}]}]}].
+
 then: using jwalk:get(Paths, Object)
     
     1> jwalk:get({"widget"}, Obj).
