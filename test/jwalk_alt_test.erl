@@ -113,7 +113,7 @@ jwalk_alt_test_() ->
                            {select, {"value", "New"}}},
                    Path2 = {"menu", "popup", "menuitem",
                             {select, {"value", "New"}}, "onclick"},
-                   Val = {<<"onclick">>, <<"CreateDifferentNewDoct()">>},
+                   Val = [{<<"onclick">>, <<"CreateDifferentNewDoct()">>}],
                    Menu1 = jwalk:set(Path, Menu, Val),
                    ?assertEqual([<<"CreateDifferentNewDoct()">>], jwalk:get(Path2, Menu1)),
                    Path3 = {"menu", "popup", "menuitem",
@@ -134,7 +134,7 @@ jwalk_alt_test_() ->
                    ],
                    Path = {{select, {"match", "me"}}},
                    Path2 = {{select, {"match", "me"}}, "more"},
-                   Val = {<<"more">>, <<"content">>},
+                   Val = [{<<"more">>, <<"content">>}],
                    Result = jwalk:set(Path, StartData, Val),
                    ?assertMatch([<<"content">>, <<"content">>], jwalk:get(Path2, Result))
            end},
@@ -151,7 +151,7 @@ jwalk_alt_test_() ->
                    ],
                    Path = {"parent", {select, {"match", "me"}}},
                    Path2 = {"parent", {select, {"match", "me"}}, "more"},
-                   Val = {<<"more">>, <<"content">>},
+                   Val = [{<<"more">>, <<"content">>}],
                    EndData = jwalk:set(Path, StartData, Val),
                    ?assertMatch([<<"content">>, <<"content">>], jwalk:get(Path2, EndData))
            end},
@@ -259,7 +259,39 @@ jwalk_alt_test_() ->
                    ?assertEqual(<<"first-item">>, jwalk:get(Path1, Menu1)),
                    List = jwalk:get({"menu", "popup", "menuitem"}, Menu1),
                    ?assertEqual(4, length(List))
+           end},
+          {"jwalk:set_p creates intermediate missing nodes",
+           fun() ->
+                   StartData = [],
+                   EndData = [{<<"a">>,
+                      [{<<"b">>,
+                           [{<<"c">>, <<"value">>}]
+                      }]
+                   }],
+                   Path = {"a", "b", "c"},
+                   Result = jwalk:set_p(Path, StartData, <<"value">>),
+                   ?assertEqual(EndData, Result),
+                   ?assertEqual(<<"value">>, jwalk:get(Path, Result)),
+                   Path2 = {"1", "2"},
+                   Result2 = jwalk:set_p(Path2, Result, <<"other-value">>),
+                   ?assertEqual(<<"other-value">>, jwalk:get(Path2, Result2)),
+                   %% Does not affect existing values
+                   ?assertEqual(<<"value">>, jwalk:get(Path, Result2))
+           end},
+          {"jwalk:set_p value in a non-existent object at a complex path",
+           fun() ->
+                   Path = {"menu", "popup", "menuitem",
+                           {select, {"value", "Edit"}}},
+                   Path2 = {"menu", "popup", "menuitem",
+                            {select, {"value", "Edit"}}, "text"},
+                   Path3 = {"menu", "popup", "menuitem",
+                            {select, {"value", "Edit"}}, "value"},
+                   Val =  [{<<"text">>, <<"helptext">>}],
+                   Menu1 = jwalk:set_p(Path, Menu, Val),
+                   ?assertMatch([<<"helptext">>], jwalk:get(Path2, Menu1)),
+                   ?assertEqual([<<"Edit">>], jwalk:get(Path3, Menu1))
            end}
+
          ]
  end
 }.

@@ -6,8 +6,8 @@ on Map and Proplist representations of JSON like what is returned by
 [jsone](https://github.com/sile/jsone). Quite frankly, I have lifted a lot of
 his verbiage and tried to follow his API.
 
-Currently, ``jwalk:get/2``, ``jwalk:get/3``, and ``jwalk:set/2`` have been 
-implemented and support both proplists and maps.
+Currently, ``jwalk:get/2``, ``jwalk:get/3``, and ``jwalk:set/2`` and
+``jwalk:set_p/2`` have been implemented and support both proplists and maps.
 In jwalk, paths into JSON objects are expressed using a tuple of keys
 
 The Path component can consist of tuples representing a javascript-like 
@@ -145,7 +145,7 @@ then: using jwalk:get(Paths, Object)
           <<"YYY">>
           
           9> jwalk:set(Path, Widget, Value).
-        #{<<"widget">> => #{<<"debug">> => <<"on">>,
+          #{<<"widget">> => #{<<"debug">> => <<"on">>,
           <<"image">> => #{<<"alignment">> => <<"center">>,
           <<"hOffset">> => 250,
           <<"name">> => <<"sun1">>,
@@ -168,6 +168,13 @@ then: using jwalk:get(Paths, Object)
           <<"title">> => <<"Sample Konfabulator Widget">>,
           <<"width">> => 500}}}.
 
+          10> jwalk:set_p({"users", {select, {"name", "sebastian"}}, "location"}, [], <<"Germany">>).
+          [{<<"users">>,
+            [[{<<"name">>,<<"sebastian">>},
+              {<<"location">>,<<"Germany">>}]]}]
+
+          11> jwalk:set_p({"users", {select, {"name", "sebastian"}}, "location"}, #{}, <<"Germany">>).
+          #{<<"users">> => [#{<<"location">> => <<"Germany">>,<<"name">> => <<"sebastian">>}]}
 
 
 
