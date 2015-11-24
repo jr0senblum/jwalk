@@ -48,8 +48,8 @@
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Return a value from 'Obj'
-%% Get takes a tuple where the elements represent a Path into a JSON Objects
+%% @doc Return a value from 'Obj'.
+%% Get takes a tuple, where the elements represent a Path into a  JSON Object,
 %% and an encoded JSON structure (proplist or map) and returns the value 
 %% indicated by the Path.
 %%
@@ -109,7 +109,7 @@ get(Keys, Obj, Default) ->
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Set a value in `Obj'
+%% @doc Set a value in `Obj'.
 %% Replaces the value at the path specified by `Keys' with `Value' and
 %% returns the new structure. If the final element of the Path, does not exist,
 %% it will be created. The atom, new, applied to an ARRAY, will create the Element 
@@ -127,7 +127,7 @@ set(Keys, Obj, Element) ->
     end.
 
 %% -----------------------------------------------------------------------------
-%% @doc Set a value in `Obj' same as set/3, but creats intermediary Elements 
+%% @doc Set a value in `Obj'. Same as set/3, but creats intermediary Elements 
 %% if necessary.
 %%
 -spec set_p(keys(), obj(), value()) -> jwalk_return().
