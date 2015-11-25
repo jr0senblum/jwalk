@@ -290,7 +290,16 @@ jwalk_alt_test_() ->
                    Menu1 = jwalk:set_p(Path, Menu, Val,proplist),
                    ?assertMatch([<<"helptext">>], jwalk:get(Path2, Menu1)),
                    ?assertEqual([<<"Edit">>], jwalk:get(Path3, Menu1))
+           end},
+          {"jwalk:set_p starting with an empty structure",
+           fun() ->
+                   Path = {"menu", "popup","menuitem",new},
+                   Path2 = {"menu", "popup","menuitem",first},
+                   Val =  [{<<"onclick">>, <<"CreateNewDoc()">>},{<<"value">>, <<"New">>}],
+                   Menu1 = jwalk:set_p(Path, [], Val, proplist),
+                   ?assertMatch(Val, jwalk:get(Path2, Menu1))
            end}
+
 
          ]
  end

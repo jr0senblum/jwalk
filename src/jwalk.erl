@@ -27,6 +27,7 @@
 -define(IS_SELECTOR(K), 
         ((K == first) orelse
          (K == last) orelse 
+         (K == new) orelse
          is_integer(K) orelse
          (is_tuple(K) andalso (element(1, K) == select)))).
 
@@ -138,8 +139,6 @@ set(Keys, Obj, Element, proplist) ->
 
 set_p(Keys, Obj, Element) ->
     set_(to_binary_list(Keys), Obj, Element, [], true, true).
-
-
 %% -----------------------------------------------------------------------------
 %% @doc Set a value in `Obj'. Same as set/3, but creats intermediary Elements 
 %% if necessary. Assumes Obj is (or will be) a Proplist.
@@ -277,6 +276,10 @@ set_([Name|Ks], Map, Val, _Acc, P, true) when not ?IS_SELECTOR(Name) andalso is_
             maps:put(Name, set_(Ks, Value, Val, [], P, true), Map)
     end;
 
+set_([new], #{}, Element, _Acc, _P, _true)  ->  
+    [Element];
+set_([new], [], Element, _Acc, _P, false)  ->  
+    [Element];
 % ALL OBJECT CASES HANDLED ABOVE %
 
 % The atom, new, applied to an ARRAY creates Element as the first element in Array.
@@ -336,13 +339,14 @@ set_([S | R], Array, Element, _Acc, P, IsMap) when is_integer(S); S == last; S =
             last -> length(Array);
             Int -> Int
         end,
+
     case R of
         [] ->
-            lists:sublist(Array, 1, N-1) ++
+            lists:sublist(Array, 1, min(1, N-1)) ++
                 [Element] ++  
                 lists:sublist(Array, N + 1, length(Array));
         _More when P ; N =<length(Array) ->
-            lists:sublist(Array, 1, N-1) ++
+            lists:sublist(Array, 1, min(1, N-1)) ++
                 [set_(R, lists:nth(N, Array), Element, [], P, IsMap)] ++
                 lists:sublist(Array, N + 1, length(Array));
         _More ->
