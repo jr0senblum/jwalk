@@ -102,7 +102,7 @@ jwalk_alt_test_() ->
            fun() ->
                    Path = {"menu", "popup", "menuitem", {select, {"value", "New"}}, "alt"},
                    Val = <<"helptext">>,
-                   Menu1 = jwalk:set(Path, Menu, Val),
+                   Menu1 = jwalk:set(Path, Menu, Val, proplist),
                    ?assertMatch([<<"helptext">>], jwalk:get(Path, Menu1))
            end},
 
@@ -114,12 +114,12 @@ jwalk_alt_test_() ->
                    Path2 = {"menu", "popup", "menuitem",
                             {select, {"value", "New"}}, "onclick"},
                    Val = [{<<"onclick">>, <<"CreateDifferentNewDoct()">>}],
-                   Menu1 = jwalk:set(Path, Menu, Val),
+                   Menu1 = jwalk:set(Path, Menu, Val, proplist),
                    ?assertEqual([<<"CreateDifferentNewDoct()">>], jwalk:get(Path2, Menu1)),
                    Path3 = {"menu", "popup", "menuitem",
                             {select, {"value", "New"}}, "speed"},
                    ValHigh = <<"high">>,
-                   Menu2 = jwalk:set(Path3, Menu1, ValHigh),
+                   Menu2 = jwalk:set(Path3, Menu1, ValHigh,proplist),
                    ?assertEqual([ValHigh], jwalk:get(Path3, Menu2))
            end},
           {"jwalk:set replace multiple children of a complex path",
@@ -135,7 +135,7 @@ jwalk_alt_test_() ->
                    Path = {{select, {"match", "me"}}},
                    Path2 = {{select, {"match", "me"}}, "more"},
                    Val = [{<<"more">>, <<"content">>}],
-                   Result = jwalk:set(Path, StartData, Val),
+                   Result = jwalk:set(Path, StartData, Val,proplist),
                    ?assertMatch([<<"content">>, <<"content">>], jwalk:get(Path2, Result))
            end},
       {"jwalk:set replace multiple children deep in a complex path",
@@ -152,7 +152,7 @@ jwalk_alt_test_() ->
                    Path = {"parent", {select, {"match", "me"}}},
                    Path2 = {"parent", {select, {"match", "me"}}, "more"},
                    Val = [{<<"more">>, <<"content">>}],
-                   EndData = jwalk:set(Path, StartData, Val),
+                   EndData = jwalk:set(Path, StartData, Val,proplist),
                    ?assertMatch([<<"content">>, <<"content">>], jwalk:get(Path2, EndData))
            end},
           {"jwalk:set should not allow replacing an array element at a complex path with a pure value",
@@ -165,7 +165,7 @@ jwalk_alt_test_() ->
                    Path = {"match", "me"},
                    Val = <<"pure-value-and-not-a-struct">>,
                    ?assertException(error, {replacing_object_with_value, _},
-                                      jwalk:set(Path, Data, Val))
+                                      jwalk:set(Path, Data, Val,proplist))
            end},
 
          {"jwalk:set, replacing existing value",
@@ -174,10 +174,10 @@ jwalk_alt_test_() ->
                    CurrentValue = jwalk:get(Path, Widget),
                    NewValue = <<"bob">>,
                    ?assert(NewValue /= CurrentValue),
-                   Widget1 = jwalk:set(Path, Widget, NewValue),
+                   Widget1 = jwalk:set(Path, Widget, NewValue,proplist),
                    ?assertEqual(NewValue, jwalk:get(Path, Widget1)),
                    % make sure the structure hasn't been disturbed
-                   Widget2 = jwalk:set(Path, Widget1, <<"main_window">>),
+                   Widget2 = jwalk:set(Path, Widget1, <<"main_window">>,proplist),
                    ?assertEqual(Widget, Widget2)
            end},
           {"jwalk:set, creating new value",
@@ -185,7 +185,7 @@ jwalk_alt_test_() ->
                    Path = {"widget", "image", "newOffset"},
                    Value = <<"YYY">>,
                    ?assertEqual(undefined, jwalk:get(Path, Widget)),
-                   Widget1 = jwalk:set(Path, Widget, Value),
+                   Widget1 = jwalk:set(Path, Widget, Value,proplist),
                    ?assertEqual(Value, jwalk:get(Path, Widget1))
            end},
           {"jwalk:set, missing intermediate path",
@@ -194,15 +194,15 @@ jwalk_alt_test_() ->
                    Value = <<"YYY">>,
                    ?assertEqual(undefined, jwalk:get(Path, Widget)),
                    ?assertException(error, {no_path, _},
-                                    jwalk:set(Path, Widget, Value))
+                                    jwalk:set(Path, Widget, Value,proplist))
            end},
           {"jwalk:set top-level",
            fun() ->
                    OrigVal = jwalk:get({"widget", "version"}, Widget),
                    NewVal = <<"2">>,
-                   NewWidget = jwalk:set({"widget", "version"}, Widget, NewVal),
+                   NewWidget = jwalk:set({"widget", "version"}, Widget, NewVal,proplist),
                    ?assertEqual(NewVal,jwalk:get({"widget", "version"}, NewWidget)),
-                   Reset = jwalk:set({"widget", "version"}, NewWidget, OrigVal),
+                   Reset = jwalk:set({"widget", "version"}, NewWidget, OrigVal,proplist),
                    ?assertEqual(Widget, Reset)
            end},
           {"jwalk:set nested",
@@ -212,22 +212,22 @@ jwalk_alt_test_() ->
                            "ID"},
                    Unchanged = jwalk:get({"glossary", "GlossDiv", "GlossList",
                                        "GlossEntry", "SortAs"}, Glossary),
-                   Glossary1 = jwalk:set(Path, Glossary, NewVal),
+                   Glossary1 = jwalk:set(Path, Glossary, NewVal,proplist),
                    ?assertEqual(NewVal, jwalk:get(Path, Glossary1)),
                    ?assertEqual(Unchanged, jwalk:get({"glossary", "GlossDiv",
                                                    "GlossList", "GlossEntry",
                                                    "SortAs"}, Glossary1)),
-                   Reset = jwalk:set(Path, Glossary1, <<"SGML">>),
+                   Reset = jwalk:set(Path, Glossary1, <<"SGML">>,proplist),
                    ?assertEqual(Glossary, Reset)
            end},
           {"jwalk:set list element",
            fun() ->
                    Orig = jwalk:get({"menu", "popup", "menuitem", 2}, Menu),
-                   New = jwalk:set({"onclick"}, Orig, <<"OpenFile()">>),
-                   Menu1 = jwalk:set({"menu", "popup", "menuitem", 2}, Menu, New),
+                   New = jwalk:set({"onclick"}, Orig, <<"OpenFile()">>,proplist),
+                   Menu1 = jwalk:set({"menu", "popup", "menuitem", 2}, Menu, New,proplist),
                    ?assertEqual(New,
                                 jwalk:get({"menu", "popup", "menuitem", 2}, Menu1)),
-                   Reset = jwalk:set({"menu", "popup", "menuitem", 2}, Menu1, Orig),
+                   Reset = jwalk:set({"menu", "popup", "menuitem", 2}, Menu1, Orig,proplist),
                    ?assertEqual(Menu, Reset)
            end},
           {"jwalk:set list element path",
@@ -235,17 +235,17 @@ jwalk_alt_test_() ->
                    Path = {"menu", "popup", "menuitem", 2, "onclick"},
                    Orig = jwalk:get(Path, Menu),
                    New = <<"OpenFile()">>,
-                   Menu1 = jwalk:set(Path, Menu, New),
+                   Menu1 = jwalk:set(Path, Menu, New,proplist),
                    ?assertEqual(New, jwalk:get(Path, Menu1)),
-                   Reset = jwalk:set(Path, Menu1, Orig),
+                   Reset = jwalk:set(Path, Menu1, Orig,proplist),
                    ?assertEqual(Menu, Reset)
            end},
           {"jwalk:set list element path first, last",
            fun() ->
                    FPath = {"menu", "popup", "menuitem", first, "value"},
                    LPath = {"menu", "popup", "menuitem", last, "value"},
-                   FMenu = jwalk:set(FPath, Menu, <<"create">>),
-                   LMenu = jwalk:set(LPath, FMenu, <<"kill">>),
+                   FMenu = jwalk:set(FPath, Menu, <<"create">>,proplist),
+                   LMenu = jwalk:set(LPath, FMenu, <<"kill">>,proplist),
                    ?assertEqual(<<"create">>, jwalk:get(FPath, FMenu)),
                    ?assertEqual(<<"create">>, jwalk:get(FPath, LMenu)),
                    ?assertEqual(<<"kill">>, jwalk:get(LPath, LMenu))
@@ -255,7 +255,7 @@ jwalk_alt_test_() ->
            fun() ->
                    Path = {"menu", "popup", "menuitem", new},
                    Path1 = {"menu", "popup", "menuitem", first},
-                   Menu1 = jwalk:set(Path, Menu, <<"first-item">>),
+                   Menu1 = jwalk:set(Path, Menu, <<"first-item">>,proplist),
                    ?assertEqual(<<"first-item">>, jwalk:get(Path1, Menu1)),
                    List = jwalk:get({"menu", "popup", "menuitem"}, Menu1),
                    ?assertEqual(4, length(List))
@@ -269,11 +269,11 @@ jwalk_alt_test_() ->
                       }]
                    }],
                    Path = {"a", "b", "c"},
-                   Result = jwalk:set_p(Path, StartData, <<"value">>),
+                   Result = jwalk:set_p(Path, StartData, <<"value">>,proplist),
                    ?assertEqual(EndData, Result),
                    ?assertEqual(<<"value">>, jwalk:get(Path, Result)),
                    Path2 = {"1", "2"},
-                   Result2 = jwalk:set_p(Path2, Result, <<"other-value">>),
+                   Result2 = jwalk:set_p(Path2, Result, <<"other-value">>,proplist),
                    ?assertEqual(<<"other-value">>, jwalk:get(Path2, Result2)),
                    %% Does not affect existing values
                    ?assertEqual(<<"value">>, jwalk:get(Path, Result2))
@@ -287,7 +287,7 @@ jwalk_alt_test_() ->
                    Path3 = {"menu", "popup", "menuitem",
                             {select, {"value", "Edit"}}, "value"},
                    Val =  [{<<"text">>, <<"helptext">>}],
-                   Menu1 = jwalk:set_p(Path, Menu, Val),
+                   Menu1 = jwalk:set_p(Path, Menu, Val,proplist),
                    ?assertMatch([<<"helptext">>], jwalk:get(Path2, Menu1)),
                    ?assertEqual([<<"Edit">>], jwalk:get(Path3, Menu1))
            end}

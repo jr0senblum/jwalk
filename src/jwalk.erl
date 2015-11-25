@@ -13,8 +13,8 @@
 -module(jwalk).
 
 -export([get/2, get/3,
-         set/3,
-         set_p/3]).
+         set/3, set/4,
+         set_p/3, set_p/4]).
 
 
 -ifdef(TEST).
@@ -109,7 +109,8 @@ get(Keys, Obj, Default) ->
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Set a value in `Obj'.
+%% @doc Set a value in `Obj', assumes Obj is (or will be) a Map.
+%%
 %% Replaces the value at the path specified by `Keys' with `Value' and
 %% returns the new structure. If the final element of the Path, does not exist,
 %% it will be created. The atom, new, applied to an ARRAY, will create the Element 
@@ -118,29 +119,45 @@ get(Keys, Obj, Default) ->
 -spec set(keys(), obj(), value()) -> jwalk_return().
 
 set(Keys, Obj, Element) ->
-    IsMap = is_map(Obj) orelse (is_list(Obj) andalso is_map(hd(Obj))),
-    try 
-        set_(to_binary_list(Keys), Obj, Element, [], false, IsMap)
-    catch
-        throw:R ->
-            error(R)
-    end.
+    do_set(to_binary_list(Keys), Obj, Element, [], false, true).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Set a value in `Obj', Obj is (or will be) Proplist representation.
+%%
+-spec set(keys(), obj(), value(), proplist) -> jwalk_return().
+set(Keys, Obj, Element, proplist) ->
+    do_set(to_binary_list(Keys), Obj, Element, [], false, false).
+
 
 %% -----------------------------------------------------------------------------
 %% @doc Set a value in `Obj'. Same as set/3, but creats intermediary Elements 
-%% if necessary.
+%% if necessary. Assumes Obj is (or will be) a Map
 %%
 -spec set_p(keys(), obj(), value()) -> jwalk_return().
 
 set_p(Keys, Obj, Element) ->
-    IsMap = is_map(Obj) orelse (is_list(Obj) andalso length(Obj) > 0 andalso is_map(hd(Obj))),
+    set_(to_binary_list(Keys), Obj, Element, [], true, true).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Set a value in `Obj'. Same as set/3, but creats intermediary Elements 
+%% if necessary. Assumes Obj is (or will be) a Proplist.
+%%
+-spec set_p(keys(), obj(), value(), proplist) -> jwalk_return().
+
+set_p(Keys, Obj, Element, proplist) ->
+    set_(to_binary_list(Keys), Obj, Element, [], true, false).
+
+
+
+do_set(Keys, Obj,Element, Acc, P, IsMap) ->
     try 
-        set_(to_binary_list(Keys), Obj, Element, [], true, IsMap)
+        set_(Keys, Obj, Element, Acc, P, IsMap)
     catch
         throw:R ->
             error(R)
     end.
-        
 
 %% -----------------------------------------------------------------------------
 %%                INTERNAL FUNCTIONS
@@ -214,49 +231,50 @@ walk([S|_], T) when ?IS_SELECTOR(S) ->
                 
 
 
-% Last part of the Path found, if it existis in the OBJECT replace it; else create it.
-set_([Name], Obj, Element, _Acc, _P, _IsMap) when ?IS_PL(Obj) andalso not ?IS_SELECTOR(Name)->
-    lists:keystore(Name, 1, Obj, {Name, Element});
+% Final Path element: if it existis in the OBJECT replace it; else create it.
+set_([Name], Obj, Val, _Acc, _P, false) when not ?IS_SELECTOR(Name) andalso ?IS_PL(Obj) ->
+    lists:keystore(Name, 1, Obj, {Name, Val});
 
-% Find OBJECT's Member with Path Name, that Member's Value will be the result 
-% of the recursive call of set_ on its Value with the ballance of the Path.
-set_([Name|Ks]=Path, [{N, V}|Ms], Element, Acc, P, IsMap) when not ?IS_SELECTOR(Name)->
+% Find targetd OBJECT's Member, replace it with recursive call.
+set_([Name|Ks]=Path, [{N, V}|Ms], Val, Acc, P, false) when not ?IS_SELECTOR(Name)->
     case Name of
         N ->
-            NewV = set_(Ks, V, Element, [], P, IsMap),
-            lists:append(lists:reverse(Acc),[{N, NewV}|Ms]);
+            NewVal = set_(Ks, V, Val, [], P, false),
+            lists:append(lists:reverse(Acc),[{N, NewVal}|Ms]);
         _Other ->
-            set_(Path, Ms, Element, [{N,V}|Acc], P, IsMap)
+            set_(Path, Ms, Val, [{N,V}|Acc], P, false)
     end;
 
 % Intermediate Path element does not exist either create it or throw.
-set_([Name|Ks], [], Element, Acc, P, IsMap) when not ?IS_SELECTOR(Name)->
+set_([Name|Ks], [], Val, Acc, P, false) when not ?IS_SELECTOR(Name) ->
     case P of
         true -> 
-            lists:append(lists:reverse(Acc), [{Name, set_(Ks,[], Element, [], P, IsMap)}]);
-        _ -> throw({no_path, Name})
+            lists:append(lists:reverse(Acc), 
+                         [{Name, set_(Ks,[], Val, [], P, false)}]);
+        _ -> 
+            throw({no_path, Name})
     end;
 
 
 % Last part of the Path found, if it exists in the OBJECT replace it; else 
 % create it.
-set_([Name], #{}=M, V, _Acc, _P, _IsMap) when not ?IS_SELECTOR(Name)->
-    maps:put(Name, V, M);
+set_([Name], Map, Val, _Acc, _P, true) when not ?IS_SELECTOR(Name) andalso is_map(Map)->
+    maps:put(Name, Val, Map);
 
 % Find Object's Member with Path Name, that Members' Value will be thre result
 % of the recursive call of set_ on the Value with the ballance of the Path. If 
 % not there, either create it or throw.
-set_([Name|Ks], #{}=M, Element, _Acc, P,IsMap) when not ?IS_SELECTOR(Name)->
-    case maps:get(Name, M, not_found) of
+set_([Name|Ks], Map, Val, _Acc, P, true) when not ?IS_SELECTOR(Name) andalso is_map(Map)->
+    case maps:get(Name, Map, not_found) of
         not_found -> 
             case P of
                 true ->
-                    maps:put(Name, set_(Ks, #{}, Element, [], P, IsMap), M);
+                    maps:put(Name, set_(Ks, #{}, Val, [], P, true), Map);
                 _ -> 
                     throw({no_path, Name})
             end;
         Value -> 
-            maps:put(Name, set_(Ks, Value, Element, [], P, IsMap), M)
+            maps:put(Name, set_(Ks, Value, Val, [], P, true), Map)
     end;
 
 % ALL OBJECT CASES HANDLED ABOVE %
@@ -278,11 +296,10 @@ set_([{select,{K,V}}=S], Array, Target, _Acc, _P, IsMap) when ?IS_OBJ(Target)->
                       merge_members(Found, Target)
               end,
 
-    case Found of 
+    case Array of 
         [] -> lists:reverse(Replace);
         _ ->
-            NewArray = lists:append(remove(Array, Found), Replace),
-            lists:reverse(NewArray)
+           lists:append(remove(Array, Found), Replace)
     end;
 
 set_([{select,{_,_}}], _Array, Target, _Acc, _P, _IsMap) ->
@@ -304,11 +321,10 @@ set_([{select,{K,V}}=S|Ks], Array, Target, _Acc, P, IsMap) ->
                       Found
               end,
     Replaced = set_(Ks, Objects, Target, [], P, IsMap),
-    case Found of
+    case Array of
         [] -> lists:reverse(Replaced);
         _ ->
-             NewArray = lists:append(remove(Array, Found), Replaced),
-            lists:reverse(NewArray)
+             lists:append(remove(Array, Found), Replaced)
     end;
 
 
