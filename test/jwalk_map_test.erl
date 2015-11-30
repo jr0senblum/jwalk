@@ -306,6 +306,69 @@ jwalk_alt_test_() ->
                                     jwalk:set_p({"menu","popup","menuitem",first,first},Menu, true)),
                    ?assertException(error, {selector_used_on_non_array,first,_},
                                     jwalk:set_p({<<"menu">>,<<"id">>,first},Menu,true))
+           end},
+          {"jwalk:remove",
+           fun() ->
+                   Path = {"glossary", "GlossDiv", "GlossList", "GlossEntry", "Abbrev"},
+                   Orig = jwalk:get(Path, Glossary),
+                   ?assert(undefined /= Orig),
+                   Glossary1 = jwalk:delete(Path, Glossary),
+                   ?assertEqual(undefined, jwalk:get(Path, Glossary1)),
+                   % verify some structure
+                   ?assertEqual(<<"SGML">>, jwalk:get({"glossary", "GlossDiv",
+                                                    "GlossList", "GlossEntry",
+                                                    "Acronym"}, Glossary1)),
+                   ?assertEqual(<<"S">>, jwalk:get({"glossary", "GlossDiv",
+                                                    "title"}, Glossary1))
+           end},
+          {"jwalk:remove parameter at complex path",
+           fun() ->
+                   Path = {"menu", "popup", "menuitem", {select, {"value", "New"}}, "onclick"},
+                   Orig = jwalk:get(Path, Menu),
+                   ?assert(undefined /= Orig),
+                   Menu1 = jwalk:delete(Path, Menu),
+                   ?assertEqual([undefined], jwalk:get(Path, Menu1)),
+                   % verify some structure
+                   VerifyPath = {"menu", "popup", "menuitem", {select, {"value", "New"}}, "value"},
+                   ?assertEqual([<<"New">>], jwalk:get(VerifyPath, Menu1)),
+                   % verify that we didn't delete siblings
+                   VerifyOpen = {"menu", "popup", "menuitem", {select, {"value", "Open"}}, "onclick"},
+                   ?assertEqual([<<"OpenDoc()">>], jwalk:get(VerifyOpen, Menu1)),
+                   VerifyClose = {"menu", "popup", "menuitem", {select, {"value", "Close"}}, "onclick"},
+                   ?assertEqual([<<"CloseDoc()">>], jwalk:get(VerifyClose, Menu1))
+           end},
+          {"jwalk:remove object at complex path, keys is tuple",
+           fun() ->
+                   Path = {"menu", "popup", "menuitem", {select, {"value", "New"}}},
+                   Orig = jwalk:get(Path, Menu),
+                   ?assert([] /= Orig),
+                   Menu1 = jwalk:delete(Path, Menu),
+                   ?assertEqual([], jwalk:get(Path, Menu1)),
+                   % verify some structure
+                   VerifyPath = {"menu", "popup", "menuitem", {select, {"value", "New"}}, "value"},
+                   ?assertEqual(undefined, jwalk:get(VerifyPath, Menu1)),
+                   % % verify that we didn't delete siblings
+                   VerifyOpen = {"menu", "popup", "menuitem", {select, {"value", "Open"}}, "onclick"},
+                   ?assertEqual([<<"OpenDoc()">>], jwalk:get(VerifyOpen, Menu1)),
+                   VerifyClose = {"menu", "popup", "menuitem", {select, {"value", "Close"}}, "onclick"},
+                   ?assertEqual([<<"CloseDoc()">>], jwalk:get(VerifyClose, Menu1))
+           end},
+
+           {"jwalk:remove object at complex path, keys is list",
+           fun() ->
+                   Path = {"menu", "popup", "menuitem", {select, {"value", "New"}}},
+                   Orig = jwalk:get(Path, Menu),
+                   ?assert([] /= Orig),
+                   Menu1 = jwalk:delete(Path, Menu),
+                   ?assertEqual([], jwalk:get(Path, Menu1)),
+                   % verify some structure
+                   VerifyPath = {"menu", "popup", "menuitem", {select, {"value", "New"}}, "value"},
+                   ?assertEqual(undefined, jwalk:get(VerifyPath, Menu1)),
+                   % % verify that we didn't delete siblings
+                   VerifyOpen = {"menu", "popup", "menuitem", {select, {"value", "Open"}}, "onclick"},
+                   ?assertEqual([<<"OpenDoc()">>], jwalk:get(VerifyOpen, Menu1)),
+                   VerifyClose = {"menu", "popup", "menuitem", {select, {"value", "Close"}}, "onclick"},
+                   ?assertEqual([<<"CloseDoc()">>], jwalk:get(VerifyClose, Menu1))
            end}
  
          ]
