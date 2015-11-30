@@ -7,13 +7,20 @@ on Map and Proplist representations of JSON of the type returned by
 his verbiage and tried to follow his API.
 
 The following functions are implemented:
-* ``jwalk:delete/2``, ``jwalk:delete/3``  - Remove the value at the location.
+* ``jwalk:delete/2``, ``jwalk:delete/3``  - Remove the value at the location
   specified by `Path' and return the new Map or Proplist representation.
 * ``jwalk:get/2``, ``jwalk:get/3``  - Return a value from Object or undefined 
   (or default).
 * ``jwalk:set/3`, ``jwalk:set/4`` - Set a value in an Object.
 * ``jwalk:p_set/3`, ``jwalk:_set/4`` - Set a value in an Object creating 
 intermediate nodes as necessary.
+
+Notice that delete/3, set/3, set_p/4 take a final parameter of the atom 
+'proplist' and these functions return Proplist representations. This is
+necessary because certain uses of these functions are ambiguous with 
+respect to whether Map or Proplist representations are being contimplated by the
+user. The sister functions/ delete/2, set/2 and set_p/3, return Map 
+representations.
 
 In jwalk, paths into JSON objects are expressed using a tuple of keys or Path elements.
 
@@ -23,8 +30,8 @@ path: i.e.,
 ``Obj.cars.make.model``  would be expressed as ``{"cars","make","model"}`` , as in
 ``jwalk:get({"cars","make","model"}, Obj)``.
 
-In addition to Names, a Path elemente can be: </br>
-* An integer index or ``first`` and ``last``: Elements of a JSON ARRAY can be accessed 
+In addition to Names, a Path element can be: </br>
+* An integer index, ``first`` or ``last``: Elements of a JSON ARRAY can be accessed 
 by using an integer index or the atoms ``first`` and ``last``
 * A subset of JSON objects in an ARRAY can be selected using ``{select, {"name","value"}}``
 
@@ -186,11 +193,6 @@ then: using jwalk:get(Paths, Object)
           #{<<"users">> => [#{<<"location">> => <<"Germany">>,<<"name">> => <<"sebastian">>}]}
 
 
-Notice that delete/3, set/3, set_p/4 take a final parameter of the atom 
-'proplist' and these functions return Proplist representations. This is
-necessary becuase certain uses of these functions are ambiguous with 
-respect to whether Map or Proplist representations are being contimplated by the
-user. The sister functions/ delete/2, set/2 and set_p/3, return Map 
-representations.
+
 
 
