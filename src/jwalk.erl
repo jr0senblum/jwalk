@@ -22,8 +22,18 @@
 -endif.
 
 
--define(IS_OBJ(X), is_map(X) orelse (is_list(X) andalso is_tuple(hd(X)))).
--define(IS_PL(X), X == [] orelse (is_list(X) andalso is_tuple(hd(X)))).
+-define(IS_OBJ(X), (is_map(X) orelse (is_list(X) andalso is_tuple(hd(X))))).
+
+-define(IS_PL(X), (X == [] orelse (is_list(X) andalso is_tuple(hd(X))))).
+
+-define(IS_J_TERM(X), 
+        (?IS_OBJ(X) orelse 
+        is_number(X) orelse 
+        (X == true) orelse
+        (X == false) orelse 
+         is_binary(X) orelse
+        (X == null))).
+
 -define(IS_SELECTOR(K), 
         ((K == first) orelse
          (K == last) orelse 
@@ -32,14 +42,14 @@
          (is_tuple(K) andalso (element(1, K) == select)))).
 
 
--type name()    :: binary() | string().
--type value()   :: binary() | string().
--type select()  :: {select, {name(), value()}}.
--type keylist() :: name() | select() | 'first' | 'last' | non_neg_integer().
--type keys()    :: {keylist()}.
--type obj()     :: map() | list(tuple()).
+-type name()     :: binary() | string().
+-type value()    :: binary() | string().
+-type select()   :: {select, {name(), value()}}.
+-type path_elt() :: name() | select() | 'first' | 'last' | non_neg_integer().
+-type path()     :: {path_elt()}.
+-type obj()      :: map() | list(tuple()) | [].
 
--type jwalk_return() :: map() | obj() | [map()] | [obj()] | undefined.
+-type jwalk_return() :: map() | obj() | [map(),...] | [obj(),...] | undefined.
 
 -export_type ([jwalk_return/0]).
 
@@ -63,10 +73,10 @@
 %% Additionally, a Path element may contain:
 %%
 %% The atoms `` 'first' '' and `` 'last' '' or an integer index indicating an 
-%% elements from a JSON array; or,
+%% element from a JSON array; or,
 %%
-%% A subset of JSON objects in an Array can be selected using {select, {"name","value"}}
-%% For example
+%% {select, {"name","value"}} which will returrn a subset of JSON objects in 
+%% an Array. For example
 %% ```
 %% Cars = [{<<"cars">>, [ [{<<"color">>, <<"white">>}, {<<"age">>, <<"old">>}],
 %%                       [{<<"color">>, <<"red">>},  {<<"age">>, <<"old">>}],
@@ -83,25 +93,26 @@
 %% ]
 %% '''
 %% 
--spec get(keys(), obj()) -> jwalk_return().
+-spec get(path(), obj()) -> jwalk_return().
 
-get(Keys, Obj) ->
+get(Path, Obj) ->
     try 
-        walk(to_binary_list(Keys), Obj)
+        walk(to_binary_list(Path), Obj)
     catch
-        throw:R ->
-            error(R)
+        throw:Error ->
+            error(Error)
     end.
 
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Same as {@link get/2. get/2}, but returns default if undefined.
+%% @doc Same as {@link get/2. get/2}, but returns default if `Path' does not
+%% exist in `Obj'.
 %%
--spec get(keys(), obj(), any()) -> jwalk_return().
+-spec get(path(), obj(), any()) -> jwalk_return().
 
-get(Keys, Obj, Default) ->
-    case get(Keys, Obj) of
+get(Path, Obj, Default) ->
+    case get(Path, Obj) of
         undefined ->
             Default;
         Found ->
@@ -112,50 +123,55 @@ get(Keys, Obj, Default) ->
 %% -----------------------------------------------------------------------------
 %% @doc Set a value in `Obj', assumes Obj is (or will be) a Map.
 %%
-%% Replaces the value at the path specified by `Keys' with `Value' and
+%% Replaces the value at the specified `Path' with `Value' and
 %% returns the new structure. If the final element of the Path, does not exist,
-%% it will be created. The atom, new, applied to an ARRAY, will create the Element 
-%% as the first element in the Array.
+%% it will be created. 
 %%
--spec set(keys(), obj(), value()) -> jwalk_return().
+%% The atom, `new', applied to an ARRAY, will create the Element as the first
+%% element in the Array.
+%%
+-spec set(path(), obj(), value()) -> jwalk_return().
 
-set(Keys, Obj, Element) ->
-    do_set(to_binary_list(Keys), Obj, Element, [], false, true).
+set(Path, Obj, Element) ->
+    do_set(to_binary_list(Path), Obj, Element, [], false, true).
 
 
 %% -----------------------------------------------------------------------------
 %% @doc Set a value in `Obj', Obj is (or will be) Proplist representation.
 %%
--spec set(keys(), obj(), value(), proplist) -> jwalk_return().
-set(Keys, Obj, Element, proplist) ->
-    do_set(to_binary_list(Keys), Obj, Element, [], false, false).
+-spec set(path(), obj(), value(), proplist) -> jwalk_return().
+
+set(Path, Obj, Element, proplist) ->
+    do_set(to_binary_list(Path), Obj, Element, [], false, false).
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Set a value in `Obj'. Same as set/3, but creats intermediary Elements 
+%% @doc Set a value in `Obj'. Same as set/3, but creates intermediary elements 
 %% if necessary. Assumes Obj is (or will be) a Map
 %%
--spec set_p(keys(), obj(), value()) -> jwalk_return().
+-spec set_p(path(), obj(), value()) -> jwalk_return().
 
-set_p(Keys, Obj, Element) ->
-    set_(to_binary_list(Keys), Obj, Element, [], true, true).
+set_p(Path, Obj, Element) ->
+    do_set(to_binary_list(Path), Obj, Element, [], true, true).
+
+
 %% -----------------------------------------------------------------------------
-%% @doc Set a value in `Obj'. Same as set/3, but creats intermediary Elements 
+%% @doc Set a value in `Obj'. Same as set/3, but creates intermediary elements 
 %% if necessary. Assumes Obj is (or will be) a Proplist.
 %%
--spec set_p(keys(), obj(), value(), proplist) -> jwalk_return().
+-spec set_p(path(), obj(), value(), proplist) -> jwalk_return().
 
-set_p(Keys, Obj, Element, proplist) ->
-    set_(to_binary_list(Keys), Obj, Element, [], true, false).
+set_p(Path, Obj, Element, proplist) ->
+    do_set(to_binary_list(Path), Obj, Element, [], true, false).
 
 
 
-do_set(Keys, Obj,Element, Acc, P, IsMap) ->
+do_set(Path, Obj,Element, Acc, P, IsMap) ->
     try 
-        set_(Keys, Obj, Element, Acc, P, IsMap)
+        set_(Path, Obj, Element, Acc, P, IsMap)
     catch
-        throw:R ->
-            error(R)
+        throw:Error ->
+            error(Error)
     end.
 
 %% -----------------------------------------------------------------------------
@@ -211,8 +227,8 @@ walk([S|Path], [_|_]=Array) when ?IS_SELECTOR(S) ->
             Element
     end;
 
-% Target = ARRAY, Path element (Name) is used to get all Values from Members
-% of Objects in the Array with name = Name.
+% Target = ARRAY, Path element is a Member Name and is used to collect all
+% Values from Members of Objects in the Array with name = Name.
 walk([Name|Path], [_|_]=Ts) ->
     case elements_with(Name, Ts) of
         Values when Path /= [] ->
@@ -254,7 +270,6 @@ set_([Name|Ks], [], Val, Acc, P, false) when not ?IS_SELECTOR(Name) ->
             throw({no_path, Name})
     end;
 
-
 % Last part of the Path found, if it exists in the OBJECT replace it; else 
 % create it.
 set_([Name], Map, Val, _Acc, _P, true) when not ?IS_SELECTOR(Name) andalso is_map(Map)->
@@ -276,34 +291,37 @@ set_([Name|Ks], Map, Val, _Acc, P, true) when not ?IS_SELECTOR(Name) andalso is_
             maps:put(Name, set_(Ks, Value, Val, [], P, true), Map)
     end;
 
-set_([new], #{}, Element, _Acc, _P, _true)  ->  
+% When final Path elemenet is NEW, just return the Element in an Array.
+set_([new], #{}, Element, _Acc, _P, _IsMap) when ?IS_J_TERM(Element) ->
     [Element];
-set_([new], [], Element, _Acc, _P, false)  ->  
+set_([new], [], Element, _Acc, _P, _IsMap)  when ?IS_J_TERM(Element) ->
     [Element];
+
+set_([S|_], Obj, _V, _A, _P, _IsMap) when ?IS_SELECTOR(S) andalso ?IS_OBJ(Obj)->
+    throw({selector_used_on_object, S, Obj});
+    
+
 % ALL OBJECT CASES HANDLED ABOVE %
 
-% The atom, new, applied to an ARRAY creates Element as the first element in Array.
-set_([new], [_|_]=Array, Element, _Acc, _P, _IsMap) ->  
+% The atom, new, applied to an ARRAY creates Element as the first element in 
+% Array.
+set_([new], Array, Element, _Acc, _P, _IsMap) when is_list(Array) ->
     [Element|Array];
 
-% The final path element is a select_by_member applied to an ARRAY. Set
-% the selected Objects with theTarget
-set_([{select,{K,V}}=S], Array, Target, _Acc, _P, IsMap) when ?IS_OBJ(Target)->
+% The final path element is a 'select by member' applied to an ARRAY. Set the 
+% selected Objects with theTarget
+set_([{select,{K,V}}=S], Array, Target, _Acc, _P, IsMap) when ?IS_OBJ(Target), is_list(Array) ->
     Found = selector_to_element(S, Array),
     Replace = case Found of
                   [] when IsMap ->
                        [maps:merge(#{K =>V}, Target)];
-                  []  -> % build it
+                  []  -> 
                       [[{K,V} | Target]];
                   Found ->
                       merge_members(Found, Target)
               end,
-
-    case Array of 
-        [] -> lists:reverse(Replace);
-        _ ->
-           lists:append(remove(Array, Found), Replace)
-    end;
+    lists:append(remove(Array, Found), Replace);
+    
 
 set_([{select,{_,_}}], _Array, Target, _Acc, _P, _IsMap) ->
     throw({replacing_object_with_value, Target});
@@ -324,42 +342,36 @@ set_([{select,{K,V}}=S|Ks], Array, Target, _Acc, P, IsMap) ->
                       Found
               end,
     Replaced = set_(Ks, Objects, Target, [], P, IsMap),
-    case Array of
-        [] -> lists:reverse(Replaced);
-        _ ->
-             lists:append(remove(Array, Found), Replaced)
-    end;
+    lists:append(remove(Array, Found), Replaced);
 
 
-% Path component is an index, either recurse on the selected Object, or replace
-% it.
-set_([S | R], Array, Element, _Acc, P, IsMap) when is_integer(S); S == last; S == first ->
-    N = case S of 
-            first -> 1;
-            last -> length(Array);
-            Int -> Int
-        end,
+% Path component is index, either recurse on the selected Object, or replace it.
+set_([S|_], Array, _Element, _Acc, _P, _IsMap) when not is_list(Array), ?IS_SELECTOR(S) ->
+    throw({selector_used_on_non_array, S, Array});
 
-    case R of
+set_([S|Path], Array, Element, _Acc, P, IsMap) when is_integer(S); S == last; S == first ->
+    N = index_to_n(Array, S),
+
+    case Path of
         [] ->
             lists:sublist(Array, 1, min(1, N-1)) ++
                 [Element] ++  
                 lists:sublist(Array, N + 1, length(Array));
         _More when P ; N =<length(Array) ->
             lists:sublist(Array, 1, min(1, N-1)) ++
-                [set_(R, lists:nth(N, Array), Element, [], P, IsMap)] ++
+                [set_(Path, lists:nth(N, Array), Element, [], P, IsMap)] ++
                 lists:sublist(Array, N + 1, length(Array));
         _More ->
             throw({no_path, S})
     end;
 
-% Final Path component is a Name, target is an ARRAY, replace/add 
-% Member to all selected Objects pulled form the Array.
+% Final Path component is a Name, target is an ARRAY, replace/add Member to all
+% selected Objects pulled form the Array.
 set_([Name], [_|_]=Array, Element, _Acc, _P, IsMap) ->
-    case elements_with(Name, Array) of
-        [undefined] when IsMap -> % create and pretend it was always there
+    case found_elements(Name, Array) of
+        undefined when IsMap -> 
              merge_members(Array, #{Name => Element});
-        [undefined] -> % create and pretend it was always there
+        undefined -> 
             merge_members(Array, [{Name, Element}]);
         ObjectSet -> 
             case ?IS_OBJ(Element) of 
@@ -370,25 +382,32 @@ set_([Name], [_|_]=Array, Element, _Acc, _P, IsMap) ->
             end
     end;
 
-% Path component is a Name, target is an ARRAY,  Set will recursively 
-% processes the selected objects containing a Member with name Name,
-% with the ballance of the Path. If the Member isn't found, it will
-% created.
-set_([Name|Keys]=Ks, [_|_]=Array, Element, _Acc, P, IsMap) ->
-    case elements_with(Name, Array) of
-        [undefined] when P, IsMap -> 
-            NewArray = merge_members(Array, #{Name => Element}),
-            set_(Ks, [NewArray], Element, [], P, IsMap);
-        [undefined] when P -> 
-            [NewArray] = merge_members(Array, [{Name, Element}]),
-            set_(Ks, [NewArray], Element, [], P, IsMap);
-        [undefined] ->
+% Path component is a Name, target is an ARRAY,  Set will recursively process
+% the selected objects containing a Member with name Name, with the ballance
+% ballance of the Path. 
+set_([Name|Keys], Array, Element, _Acc, P, IsMap) ->
+    case found_elements(Name, Array) of
+        undefined ->
             throw({no_path, Name});
         ObjectSet -> 
             NewObjSet = set_(Keys, ObjectSet, Element, [], P, IsMap),
             merge_members(remove(Array,ObjectSet), NewObjSet)
 
     end.
+
+
+
+found_elements(Name, Array) ->
+    case elements_with(Name, Array) of
+        undefined -> undefined;
+        EList -> 
+            case lists:filter(fun(R) -> R /= undefined end, EList) of
+                [] -> undefined;
+                Elements ->
+                    Elements
+            end
+    end.
+             
 
 merge_members([#{}|_] = Maps, Target) ->
     [maps:merge(M, Target) || M <- Maps];
@@ -401,6 +420,7 @@ merge_pl(P1, [{K,V}|Ts]) ->
 merge_pl(P1, []) ->
     P1.
 
+remove([], Remove) -> Remove;
 remove(Objects, []) -> Objects;
 remove(Objects, Remove) -> 
     lists:reverse(ordsets:to_list(
@@ -408,14 +428,14 @@ remove(Objects, Remove) ->
                                      ordsets:from_list(Remove)))).
 
 
-% Return all Values, from Object's Members (Name, Value) from an Array of 
-% Objects.
-elements_with(Key, Array) ->
-    Elements = [walk([Key], Obj) || Obj <- Array, ?IS_OBJ(Obj)],
+% Return an Array of Elements, from Array, where the Element exists at Path.
+elements_with(Path, Array) ->
+    Elements = [walk([Path], Obj) || Obj <- Array, ?IS_OBJ(Obj)],
     case Elements of
         [] -> undefined;
         _ -> dont_nest(Elements)
     end.
+
 
 % Make sure that we always return an Array of Objects.
 dont_nest(H) -> 
@@ -429,6 +449,7 @@ dont_nest(H) ->
             A
     end.
 
+% Select out a subset of Objects
 selector_to_element({select, {K,V}}, [{_,_}|_]=L) ->
     case proplists:lookup(K, L) of
         {K,V} -> [L];
@@ -456,6 +477,10 @@ selector_to_element(last, L) ->
 
 selector_to_element(N, L)  ->
     lists:nth(N, L).
+
+index_to_n(_Array, first) -> 1;
+index_to_n(Array, last) -> length(Array);
+index_to_n(_Array, Integer) -> Integer.
 
 
 to_binary_list(Keys) ->

@@ -157,7 +157,7 @@ jwalk_alt_test_() ->
                    Data = [ [{<<"match">>, <<"me">>}] ],
                    Path = {"match", "me"},
                    Val = <<"pure-value-and-not-a-struct">>,
-                   ?assertException(error, {replacing_object_with_value, _},
+                   ?_assertException(error, {replacing_object_with_value, _},
                                       jwalk:set(Path, Data, Val))
            end},
 
@@ -292,9 +292,22 @@ jwalk_alt_test_() ->
                    Val =  #{<<"onclick">> => <<"CreateNewDoc()">>,<<"value">> => <<"New">>},
                    Menu1 = jwalk:set_p(Path, #{}, Val),
                    ?assertMatch(Val, jwalk:get(Path2, Menu1))
+           end},
+          {"jwalk:set using selector on non-array",
+           fun() ->
+                   ?assertException(error, {selector_used_on_non_array,first,_},
+                                    jwalk:set({<<"menu">>,<<"id">>,first},Menu,true)),
+                   ?assertException(error, {selector_used_on_object,first,__},
+                                    jwalk:set({"menu","popup","menuitem",first,first},Menu, true))
+           end},
+          {"jwalk:set_p using selector on object",
+           fun() ->
+                   ?assertException(error, {selector_used_on_object,first,__},
+                                    jwalk:set_p({"menu","popup","menuitem",first,first},Menu, true)),
+                   ?assertException(error, {selector_used_on_non_array,first,_},
+                                    jwalk:set_p({<<"menu">>,<<"id">>,first},Menu,true))
            end}
  
-
          ]
  end
 }.
