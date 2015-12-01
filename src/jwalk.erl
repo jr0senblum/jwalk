@@ -506,9 +506,7 @@ elements_with(Path, Array) ->
 dont_nest(H) -> 
     A = lists:flatten(H),
     case A of
-        [{_,_}|_]=Obj ->
-            [Obj];
-        {} = Obj ->
+        [{_,_}|_] = Obj ->
             [Obj];
         _ ->
             A

@@ -8,11 +8,31 @@ on Map and Proplist representations of JSON - the type returned by
 [jsone](https://github.com/sile/jsone), for example. Anything that is good about
 this is due to him, anything bad is completely my fault.
 ###Dependencies
-Erlang 17.0 +
+Erlang 18.0 +
 
 Builds with rebar3 or Hex
 
 No other dependencies, the src code is a single file.
+
+###QuickStart
+# clone
+$ git clone git://github.com/jr0senblum/jwalk.git
+$ cd jwalk
+
+# compile
+$ make compile
+
+# run tests
+$ make eunit
+
+# dialyze
+$ make dialyze
+
+# Erlang shell
+$ make start
+1> jwalk:get({"one"},#{<<"one">>=>1}).
+1
+
 
 ###Functions
 The following functions are implemented where Path is a tuple representation of a 
