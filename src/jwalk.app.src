@@ -1,11 +1,12 @@
 {application, jwalk,
  [
   {description, "Helper module for working with Erlang proplist and map representations of JSON modled after ej"},
-  {vsn, "0.5.0"},
+  {vsn, "0.6.0"},
   {registered, []},
   {applications, [kernel, stdlib]},
+  {env,[]},
+  {modules, []},
   {maintainers, ["Jim Rosenblum"]},
-  {licenses, ["The MIT License"]},
-  {links,[{"GitHub","https://github.com/jr0senblum/jwalk"}]},
-  {env,[]}
+  {licenses, ["MIT"]},
+  {links,[{"GitHub","https://github.com/jr0senblum/jwalk"}]}
  ]}.

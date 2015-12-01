@@ -2,6 +2,7 @@
 ##Helper module for working with Erlang Proplist and Map representations of JSON
 
 [![Build Status](https://travis-ci.org/jr0senblum/jwalk.svg)](https://travis-ci.org/jr0senblum/jwalk)
+[![hex.pm version](https://img.shields.io/hexpm/v/jwalk.svg)](https://hex.pm/packages/jwalk)
 
 This work is a partial re-wrte of [ej](https://github.com/seth/ej) but focuses 
 on Map and Proplist representations of JSON - the type returned by
