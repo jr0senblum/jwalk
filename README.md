@@ -1,27 +1,38 @@
 #jwalk
 ##Helper module for working with Erlang Proplist and Map representations of JSON
 
+[![Build Status](https://travis-ci.org/jr0senblum/jwalk.svg)](https://travis-ci.org/jr0senblum/jwalk)
+
 This work is a partial re-wrte of [ej](https://github.com/seth/ej) but focuses 
-on Map and Proplist representations of JSON of the type returned by
-[jsone](https://github.com/sile/jsone). I have lifted a lot of
-his verbiage and tried to follow his API.
+on Map and Proplist representations of JSON - the type returned by
+[jsone](https://github.com/sile/jsone), for example. Anything that is good about
+this is due to him, anything bad is completely my fault.
+###Dependencies
+Erlang 17.0 +
 
-The following functions are implemented:
-* ``jwalk:delete/2``, ``jwalk:delete/3``  - Remove the value at the location
-  specified by `Path' and return the new Map or Proplist representation.
-* ``jwalk:get/2``, ``jwalk:get/3``  - Return a value from Object or undefined 
-  (or default).
-* ``jwalk:set/3`, ``jwalk:set/4`` - Set a value in an Object.
-* ``jwalk:p_set/3`, ``jwalk:_set/4`` - Set a value in an Object creating 
-intermediate nodes as necessary.
+Builds with rebar3 or Hex
 
-Notice that delete/3, set/3, set_p/4 take a final parameter of the atom 
-'proplist' and these functions return Proplist representations. This is
-necessary because certain uses of these functions are ambiguous with 
-respect to whether Map or Proplist representations are being contimplated by the
-user. The sister functions/ delete/2, set/2 and set_p/3, return Map 
-representations.
+No other dependencies, the src code is a single file.
 
+###Functions
+The following functions are implemented where Path is a tuple representation of a 
+javascript-like path (see below) and Obj is a Map or Proplist representation of JSON:
+
+* ``jwalk:delete/(Path, Obj)``, ``jwalk:delete(Path, Obj, proplist)`` - Remove the value 
+from Obj, at the location specified by Path, and return a new Map or Proplist.
+* ``jwalk:get(Path, Obj)``, ``jwalk:get(Path, Obj, Default)``  - Return the value from Obj
+at the specificed Path, or undefined (or Default).
+* ``jwalk:set(Path, Obj, Val)``, ``jwalk:set(Path, Obj, Val, proplist)`` - Set a value 
+in an Object.
+* ``jwalk:p_set(Path, Obj, Val)``, ``jwalk:_set/(Path, Obj, Val, proplist)`` - Set a 
+value in an Object creating intermediate nodes as necessary.
+
+Notice that delete/3, set/3, set_p/4 take a final parameter, the atom 
+'proplist', and return Proplist representations. This is necessary because certain
+certain uses of these functions are ambiguous with respect to whether Map or Proplist representations are being contemplated by the user. The sister functions/ delete/2, 
+set/2 and set_p/3, assume Map representations.
+
+###Paths
 In jwalk, paths into JSON objects are expressed using a tuple of keys or Path elements.
 
 The Path elements can be thought of as a tuple represention of a javascript-like 
@@ -30,10 +41,12 @@ path: i.e.,
 ``Obj.cars.make.model``  would be expressed as ``{"cars","make","model"}`` , as in
 ``jwalk:get({"cars","make","model"}, Obj)``.
 
-In addition to Names, a Path element can be: </br>
-* An integer index, ``first`` or ``last``: Elements of a JSON ARRAY can be accessed 
-by using an integer index or the atoms ``first`` and ``last``
-* A subset of JSON objects in an ARRAY can be selected using ``{select, {"name","value"}}``
+In addition to Names, a Path element can be
+
+* An integer index, or the atoms ``first`` and ``last`` which will select elements of a 
+JSON ARRAY 
+* ``{select, {"name","value"}}`` which will select a subset of JSON objects from an
+Array having a Member ``{"Name": Value}`` 
 
 For example
 
@@ -50,7 +63,7 @@ For example
        [{<<"color">>, <<"red">>},   {<<"age">>, <<"old">>}]
      ]
 
-
+###Usage Examples
 Given:
 
     Obj = #{<<"widget">> => 
