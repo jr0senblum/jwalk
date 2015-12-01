@@ -7,34 +7,37 @@ This work is a partial re-wrte of [ej](https://github.com/seth/ej) but focuses
 on Map and Proplist representations of JSON - the type returned by
 [jsone](https://github.com/sile/jsone), for example. Anything that is good about
 this is due to him, anything bad is completely my fault.
-###Dependencies
+##Dependencies
 Erlang 18.0 +
 
 Builds with rebar3 or Hex
 
 No other dependencies, the src code is a single file.
 
-###QuickStart
-# clone
+##QuickStart
+### clone
 $ git clone git://github.com/jr0senblum/jwalk.git
+
 $ cd jwalk
 
-# compile
+### compile
 $ make compile
 
-# run tests
+### run tests
 $ make eunit
 
-# dialyze
+### dialyze
 $ make dialyze
 
-# Erlang shell
+### Erlang shell
 $ make start
+
 1> jwalk:get({"one"},#{<<"one">>=>1}).
+
 1
 
 
-###Functions
+##Functions
 The following functions are implemented where Path is a tuple representation of a 
 javascript-like path (see below) and Obj is a Map or Proplist representation of JSON:
 
@@ -52,7 +55,7 @@ Notice that delete/3, set/3, set_p/4 take a final parameter, the atom
 certain uses of these functions are ambiguous with respect to whether Map or Proplist representations are being contemplated by the user. The sister functions/ delete/2, 
 set/2 and set_p/3, assume Map representations.
 
-###Paths
+##Paths
 In jwalk, paths into JSON objects are expressed using a tuple of keys or Path elements.
 
 The Path elements can be thought of as a tuple represention of a javascript-like 
@@ -83,7 +86,7 @@ For example
        [{<<"color">>, <<"red">>},   {<<"age">>, <<"old">>}]
      ]
 
-###Usage Examples
+##Usage Examples
 Given:
 
     Obj = #{<<"widget">> => 
