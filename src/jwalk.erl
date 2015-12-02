@@ -243,7 +243,7 @@ walk([Name|Path], [{_, _}|_]=Object) when not ?IS_SELECTOR(Name)->
 % Target = map = OBJECT: if Member exists in Object continue with that Members
 % Value.
 walk([Name|Path], #{}=Object) when not ?IS_SELECTOR(Name) ->
-    case maps:get(Name, Object, undefined) of
+    case map_get(Name, Object, undefined) of
         undefined -> undefined;
         Value when Path /= [] ->
             walk(Path, Value);
@@ -321,7 +321,7 @@ set_([Name], Map, Val, _Acc, _P, true) when not ?IS_SELECTOR(Name) andalso is_ma
 % of the recursive call of set_ on the Value with the ballance of the Path. If 
 % not there, either create it or throw.
 set_([Name|Ks], Map, Val, _Acc, P, true) when not ?IS_SELECTOR(Name) andalso is_map(Map)->
-    case maps:get(Name, Map, not_found) of
+    case map_get(Name, Map, not_found) of
         not_found -> 
             case P of
                 true ->
@@ -521,7 +521,7 @@ selector_to_element({select, {K,V}}, [{_,_}|_]=L) ->
     end;
 
 selector_to_element({select, {K,V}}, #{}=L) ->
-    case maps:get(K, L, jwalk_false) of
+    case map_get(K, L, jwalk_false) of
         V -> [L];
         _ -> []
     end;
@@ -562,6 +562,18 @@ make_binary(K) when is_list(K) -> list_to_binary(K);
 make_binary(K) when is_atom(K) -> K;
 make_binary({select, {K, V}}) -> 
     {select, {make_binary(K), make_binary(V)}}.
+
+
+map_get(Key, Map, Default) ->
+     try  maps:get(Key, Map) of
+          Value ->
+             Value
+     catch
+         error:{badkey, Key} ->
+             Default
+     end.
+        
+
 
 
 
