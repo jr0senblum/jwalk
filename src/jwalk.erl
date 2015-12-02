@@ -381,7 +381,7 @@ set_([{select,{K,V}}=S|Ks], Array, Target, _Acc, P, IsMap) ->
     Found = selector_to_element(S, Array),
     Objects = case Found of
                   [] when P andalso IsMap ->
-                       [#{K =>V}];
+                       [maps:put(K,V, #{})];
                   [] when P ->
                       [[{K,V}]];
                   [] -> 
@@ -429,7 +429,7 @@ set_([Name], [_|_]=Array, delete, _Acc, _IsP, _IsMap) ->
 set_([Name], [_|_]=Array, Element, _Acc, _P, IsMap) ->
     case found_elements(Name, Array) of
         undefined when IsMap -> 
-             merge_members(Array, #{Name => Element});
+             merge_members(Array, maps:put(Name, Element, #{}));
         undefined -> 
             merge_members(Array, [{Name, Element}]);
         ObjectSet -> 

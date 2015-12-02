@@ -9,7 +9,7 @@ on Map and Proplist representations of JSON - the type returned by
 [jsone](https://github.com/sile/jsone), for example. Anything that is good about
 this is due to him, anything bad is completely my fault.
 ##Dependencies
-Erlang 18.0 +
+Erlang 17.0 +
 
 Builds with rebar3 or Hex
 
