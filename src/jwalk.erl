@@ -569,7 +569,7 @@ map_get(Key, Map, Default) ->
           Value ->
              Value
      catch
-         error:{badkey, Key} ->
+         _:_ ->
              Default
      end.
         
