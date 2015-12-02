@@ -42,19 +42,13 @@ $ make start
 The following functions are implemented where Path is a tuple representation of a 
 javascript-like path (see below) and Obj is a Map or Proplist representation of JSON:
 
-* ``jwalk:delete(Path, Obj)``, ``jwalk:delete(Path, Obj, proplist)`` - Remove the value 
-from Obj, at the location specified by Path, and return a new Map or Proplist.
+* ``jwalk:delete(Path, Obj)`` - Remove the value from Obj, at the location specified by 
+Path, and return a new Map or Proplist.
 * ``jwalk:get(Path, Obj)``, ``jwalk:get(Path, Obj, Default)``  - Return the value from Obj
 at the specificed Path, or undefined or Default.
-* ``jwalk:set(Path, Obj, Val)``, ``jwalk:set(Path, Obj, Val, proplist)`` - Set a value 
-in an Object.
-* ``jwalk:p_set(Path, Obj, Val)``, ``jwalk:_set/(Path, Obj, Val, proplist)`` - Set a 
-value in an Object creating intermediate nodes as necessary.
-
-Notice that delete/3, set/3, set_p/4 take a final parameter, the atom 
-'proplist', and expect and return Proplist representations. This is necessary because 
-certain uses of these functions are ambiguous with respect to whether Map or Proplist representations are being contemplated by the user. The sister functions, delete/2, 
-set/2 and set_p/3, assume Map representations.
+* ``jwalk:set(Path, Obj, Val)`` - Set a value in an Object and return the new structure.
+* ``jwalk:p_set(Path, Obj, Val)`` - Set a value in an Object creating intermediate nodes 
+as necessary returning the new strcutre
 
 ##Paths
 In jwalk, paths into JSON objects are expressed using a tuple of keys or Path elements.
@@ -227,7 +221,7 @@ then: using jwalk:get(Paths, Object)
           <<"width">> => 500}}}.
 
           10> jwalk:set_p({"users", {select, {"name", "sebastian"}}, "location"}, [],       
-          <<"Germany">>, proplist).
+          <<"Germany">>).
           [{<<"users">>,
             [[{<<"name">>,<<"sebastian">>},
               {<<"location">>,<<"Germany">>}]]}]
