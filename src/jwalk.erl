@@ -539,8 +539,12 @@ selector_to_element(first, L) ->
 selector_to_element(last, L) ->
     lists:last(L);
 
-selector_to_element(N, L)  ->
-    lists:nth(N, L).
+selector_to_element(N, L)  when N =< length(L) ->
+    lists:nth(N, L);
+selector_to_element(N, L)  when N > length(L) ->
+    throw({error, index_out_of_bounds, N, L}).
+
+
 
 
 index_to_n(_Array, first) -> 1;
