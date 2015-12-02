@@ -8,29 +8,29 @@ This work is a partial re-wrte of [ej](https://github.com/seth/ej) but focuses
 on Map and Proplist representations of JSON - the type returned by
 [jsone](https://github.com/sile/jsone), for example. Anything that is good about
 this is due to him, anything bad is completely my fault.
-##Dependencies
+###Dependencies
 Erlang 17.0 +
 
 Builds with rebar3 or Hex
 
 No other dependencies, the src code is a single file.
 
-##QuickStart
-### clone
+###QuickStart
+##### clone
 $ git clone git://github.com/jr0senblum/jwalk.git
 
 $ cd jwalk
 
-### compile
+#### compile
 $ make compile
 
-### run tests
+#### run tests
 $ make eunit
 
-### dialyze
+#### dialyze
 $ make dialyze
 
-### Erlang shell
+#### Erlang shell
 $ make start
 
 1> jwalk:get({"one"},#{<<"one">>=>1}).
@@ -42,18 +42,18 @@ $ make start
 The following functions are implemented where Path is a tuple representation of a 
 javascript-like path (see below) and Obj is a Map or Proplist representation of JSON:
 
-* ``jwalk:delete/(Path, Obj)``, ``jwalk:delete(Path, Obj, proplist)`` - Remove the value 
+* ``jwalk:delete(Path, Obj)``, ``jwalk:delete(Path, Obj, proplist)`` - Remove the value 
 from Obj, at the location specified by Path, and return a new Map or Proplist.
 * ``jwalk:get(Path, Obj)``, ``jwalk:get(Path, Obj, Default)``  - Return the value from Obj
-at the specificed Path, or undefined (or Default).
+at the specificed Path, or undefined or Default.
 * ``jwalk:set(Path, Obj, Val)``, ``jwalk:set(Path, Obj, Val, proplist)`` - Set a value 
 in an Object.
 * ``jwalk:p_set(Path, Obj, Val)``, ``jwalk:_set/(Path, Obj, Val, proplist)`` - Set a 
 value in an Object creating intermediate nodes as necessary.
 
 Notice that delete/3, set/3, set_p/4 take a final parameter, the atom 
-'proplist', and return Proplist representations. This is necessary because certain
-certain uses of these functions are ambiguous with respect to whether Map or Proplist representations are being contemplated by the user. The sister functions/ delete/2, 
+'proplist', and expect and return Proplist representations. This is necessary because 
+certain uses of these functions are ambiguous with respect to whether Map or Proplist representations are being contemplated by the user. The sister functions, delete/2, 
 set/2 and set_p/3, assume Map representations.
 
 ##Paths
@@ -83,11 +83,16 @@ For example
  Then 
 
 	1> jwalk:get({"cars", {select {"age", "old"}}}, Cars).
-	 [ [{<<"color">>, <<"white">>}, {<<"age">>, <<"old">>}],
-       [{<<"color">>, <<"red">>},   {<<"age">>, <<"old">>}]
-     ]
+	[[{<<"color">>, <<"white">>}, {<<"age">>, <<"old">>}],
+       [{<<"color">>, <<"red">>},   {<<"age">>, <<"old">>}]]
 
-##Usage Examples
+    2> jwalk:get({"cars", {select, {"age", "old"}}, 1}, Cars).
+    [{<<"color">>,<<"white">>},{<<"age">>,<<"old">>}]
+
+    3> jwalk:get({"cars", {select, {"age", "old"}},first,"color"}, Cars).
+    <<"white">>
+
+###Usage Examples
 Given:
 
     Obj = #{<<"widget">> => 
@@ -221,12 +226,14 @@ then: using jwalk:get(Paths, Object)
           <<"title">> => <<"Sample Konfabulator Widget">>,
           <<"width">> => 500}}}.
 
-          10> jwalk:set_p({"users", {select, {"name", "sebastian"}}, "location"}, [], <<"Germany">>, proplist).
+          10> jwalk:set_p({"users", {select, {"name", "sebastian"}}, "location"}, [],       
+          <<"Germany">>, proplist).
           [{<<"users">>,
             [[{<<"name">>,<<"sebastian">>},
               {<<"location">>,<<"Germany">>}]]}]
 
-          11> jwalk:set_p({"users", {select, {"name", "sebastian"}}, "location"}, #{}, <<"Germany">>).
+          11> jwalk:set_p({"users", {select, {"name", "sebastian"}}, "location"}, #{}, 
+          <<"Germany">>).
           #{<<"users">> => [#{<<"location">> => <<"Germany">>,<<"name">> => <<"sebastian">>}]}
 
 

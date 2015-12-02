@@ -5,8 +5,8 @@
 %%% The jwalk modue is intended to make it easier to work with Erlang encodings
 %%% of JSON - either MAPS or PROPERTY LISTS. 
 %%%
-%%% This work is a derivitive  of https://github.com/seth/ejm but focuses on 
-%%% map and property list representation of JSON.
+%%% This work is a derivitive of https://github.com/seth/ejm but focuses on 
+%%% map and property list representations of JSON.
 %%%
 %%% Functions take a tuple, where the elements of the tuple represent a Path 
 %%% into a JSON Object, and an encoded JSON structure (Proplist or Map) and 
@@ -34,11 +34,17 @@
 %%% Then 
 %%%
 %%% ```
-%%% jwalk:get({"cars", {select {"age", "old"}}}, Cars).
+%%% jwalk:get({"cars", {select, {"age", "old"}}}, Cars).
 %%%
 %%%  [ [{<<"color">>, <<"white">>}, {<<"age">>, <<"old">>}],
 %%%    [{<<"color">>, <<"red">>},   {<<"age">>, <<"old">>}]
 %%% ]
+%%%
+%%% jwalk:get({"cars", {select, {"age", "old"}}, 1}, Cars).
+%%% [{<<"color">>,<<"white">>},{<<"age">>,<<"old">>}]
+%%%
+%%% jwalk:get({"cars", {select, {"age", "old"}},first,"color"}, Cars).
+%%% <<"white">>
 %%% '''
 %%% @end
 %%% Created : 20 Nov 2015 by Jim Rosenblum <jrosenblum@prodigy.net>
@@ -96,7 +102,9 @@
 
 %% -----------------------------------------------------------------------------
 %% @doc Remove the value at the location specified by `Path' and return the
-%% new Map representation. Path elements that are strings can be binary or not
+%% new Map representation. 
+%%
+%% Path elements that are strings can be binary or not
 %% - they will be converted to binary if not.
 %%
 -spec delete(path(), obj()) -> jwalk_return().
@@ -107,8 +115,8 @@ delete(Path, Obj) ->
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Same as {@link delete/2. delete/2} except it expects and returns a 
-%% Property list representation of `obj'.
+%% @doc Same as {@link delete/2. delete/2}, but returns and expects a Proplist
+%% representation of `obj'.
 %%
 -spec delete(path(), obj(), proplist) -> jwalk_return().
 
@@ -118,7 +126,8 @@ delete(Path, Obj, proplist) ->
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Return a value from 'Obj'.
+%% @doc Return a value from 'Obj'. 
+%%
 %% Path elements that are strings can be binary or not - they will be converted 
 %% to binary if not.
 %%
@@ -154,7 +163,7 @@ get(Path, Obj, Default) ->
 %% @doc Set a value in `Obj', assumes Obj is (or will be) a Map.
 %%
 %% Replace the value at the specified `Path' with `Value' and return the new
-%% structure. If the final element of the Path, does not exist, it will be
+%% structure. If the final element of the Path does not exist, it will be
 %% created. 
 %%
 %% The atom, `new', applied to an ARRAY, will create the Element as the first
@@ -217,71 +226,53 @@ do_set(Path, Obj,Element, Acc, P, IsMap) ->
 %% -----------------------------------------------------------------------------
 
 
+
 % Selecting a subset of an empty list is an empty list.
 walk([{select, {_,_}}|_], []) ->
     [];
 
-% Applying a Path to an empty list means the Path doesn't exist; thus undefined.
+% Applying a Path to an empty list means the Path doesn't exist.
 walk(_, []) ->
     undefined;
 
 % Any Path applied to null is undefined.
 walk(_, null) -> undefined;
 
-% Target = [{k,v}..] = OBJECT: if Member exists in Object continue with that
-% Members Value.
-walk([Name|Path], [{_, _}|_]=Object) when not ?IS_SELECTOR(Name)->
-    case lists:keyfind(Name, 1, Object) of 
-        false ->
-            undefined;
-        {Name, Value} when Path /= []->
-            walk(Path, Value);
-        {Name, Value} ->
-            Value
-    end;
+% OBJECT: if Member with Name exists in Obj, continue with that Member's Value.
+walk([Name|Path], [{_, _}|_]=Obj) when not ?IS_SELECTOR(Name)->
+    continue(lists:keyfind(Name, 1, Obj), Path);
 
-% Target = map = OBJECT: if Member exists in Object continue with that Members
-% Value.
-walk([Name|Path], #{}=Object) when not ?IS_SELECTOR(Name) ->
-    case map_get(Name, Object, undefined) of
-        undefined -> undefined;
-        Value when Path /= [] ->
-            walk(Path, Value);
-        Value ->
-            Value
-    end;
+% OBJECT: if Member with Name exists in Obj continue with that Member's Value.
+walk([Name|Path], #{}=Obj) when not ?IS_SELECTOR(Name) ->
+    continue(map_get(Name, Obj, undefined),Path);
 
-% Target is an OBJECT, but we have a selector wanting an Array.
+% OBJECT: but we have a selector wanting an Array.
 walk([S|_], Obj) when ?IS_SELECTOR(S), ?IS_OBJ(Obj)->
-    throw({index_for_non_list, Obj});
+    throw({index_for_non_array, Obj});
 
-% Target = ARRAY, access it via selector and continue with the rest of the Path
-% and the returned Object or Array.
+% ARRAY: access it via selector and continue as appropriate.
 walk([S|Path], [_|_]=Array) when ?IS_SELECTOR(S) ->
-    case selector_to_element(S, Array) of
-        Element when Path /=[] ->
-            walk(Path, Element);
-        Element ->
-            Element
-    end;
+    continue(selector_to_element(S, Array), Path);
 
-% Target = ARRAY, Path element is a Member Name and is used to collect all
-% Values from Members of Objects in the Array with name = Name.
+% ARRAY: Get all Values of Members with name = Name and continue as appropriate.
 walk([Name|Path], [_|_]=Ts) ->
-    case elements_with(Name, Ts) of
-        Values when Path /= [] ->
-            walk(Path, Values);
-        Values ->
-            Values
-    end;
+    continue(values_at(Name, Ts), Path);
 
 % Target is something other than an ARRAY, but we have a selector.
 walk([S|_], T) when ?IS_SELECTOR(S) ->
-    throw({index_for_non_list, T}).
+    throw({index_for_non_array, T}).
+
+
+continue(false, _Path)                         -> undefined;
+continue(undefined, _Path)                     -> undefined;
+continue({_Name, Value}, Path) when Path == [] -> Value;
+continue(Value, Path) when Path == []          ->  Value;
+continue({_Name, Value}, Path)                 -> walk(Path, Value);
+continue(Value, Path)                          -> walk(Path, Value).
 
 
 
-% Final Path element: if it existis in the OBJECT delete it.
+% Final Path element: if it exists in the OBJECT delete it.
 set_([Name], Obj, delete, _Acc, _IsP, _IsMap) when not ?IS_SELECTOR(Name) andalso ?IS_PL(Obj) ->
     lists:keydelete(Name, 1, Obj);
 
@@ -289,7 +280,7 @@ set_([Name], Obj, delete, _Acc, _IsP, _IsMap) when not ?IS_SELECTOR(Name) andals
 set_([Name], Obj, Val, _Acc, _IsP, false) when not ?IS_SELECTOR(Name) andalso ?IS_PL(Obj) ->
     lists:keystore(Name, 1, Obj, {Name, Val});
 
-% Find targetd OBJECT's Member, replace it with recursive call.
+% Iterate through Members for target. Replace its value with recursive call when found.
 set_([Name|Ks]=Path, [{N, V}|Ms], Val, Acc, IsP, false) when not ?IS_SELECTOR(Name)->
     case Name of
         N ->
@@ -309,17 +300,15 @@ set_([Name|Ks], [], Val, Acc, IsP, false) when not ?IS_SELECTOR(Name) ->
             throw({no_path, Name})
     end;
 
-% Final Path element: if it existis in the OBJECT delete it.
+% Final Path element: if it exiss in the OBJECT delete it.
 set_([Name], Map, delete, _Acc, _IsP, _IsMap) when not ?IS_SELECTOR(Name) andalso is_map(Map)->
     maps:remove(Name, Map);
 
-% Last part of the Path found, if it exists in the OBJECT replace or create it.
+% Final Path element; if it exists replace or create it.
 set_([Name], Map, Val, _Acc, _P, true) when not ?IS_SELECTOR(Name) andalso is_map(Map)->
     maps:put(Name, Val, Map);
 
-% Find Object's Member with Path Name, that Members' Value will be thre result
-% of the recursive call of set_ on the Value with the ballance of the Path. If 
-% not there, either create it or throw.
+% Find target and replace its Value with the recursiver call. Create if appropriate.
 set_([Name|Ks], Map, Val, _Acc, P, true) when not ?IS_SELECTOR(Name) andalso is_map(Map)->
     case map_get(Name, Map, not_found) of
         not_found -> 
@@ -346,8 +335,7 @@ set_([S|_], Obj, _V, _A, _P, _IsMap) when ?IS_SELECTOR(S) andalso ?IS_OBJ(Obj)->
 
 % ALL OBJECT CASES HANDLED ABOVE %
 
-% The atom, new, applied to an ARRAY creates Element as the first element in 
-% Array.
+% New applied to an ARRAY creates Element as the first element in  Array.
 set_([new], Array, Element, _Acc, _P, _IsMap) when is_list(Array) ->
     [Element|Array];
 
@@ -369,14 +357,10 @@ set_([{select,{K,V}}=S], Array, Target, _Acc, _P, IsMap) when ?IS_OBJ(Target), i
               end,
     lists:append(remove(Array, Found), Replace);
     
-
-
 set_([{select,{_,_}}], _Array, Target, _Acc, _P, _IsMap) ->
     throw({replacing_object_with_value, Target});
 
-% A path element is a select_by_member applied to an ARRAY. Replace the selected
-% Objects with the recursive call on the rest of the path and the selected 
-% elements.
+% Select_by_member applied to an ARRAY. 
 set_([{select,{K,V}}=S|Ks], Array, Target, _Acc, P, IsMap) ->
     Found = selector_to_element(S, Array),
     Objects = case Found of
@@ -399,7 +383,6 @@ set_([S|_], Array, _Element, _Acc, _P, _IsMap) when not is_list(Array), ?IS_SELE
 
 set_([S|Path], Array, Element, _Acc, P, IsMap) when is_integer(S); S == last; S == first ->
     N = index_to_n(Array, S),
-
     case Path of
         [] ->
             lists:sublist(Array, 1, min(1, N-1)) ++
@@ -420,7 +403,6 @@ set_([Name], [_|_]=Array, delete, _Acc, _IsP, _IsMap) ->
     F = fun(#{}=Map)      -> maps:remove(Name, Map);
            ([{_,_}|_]=Pl) -> lists:keydelete(Name, 1, Pl)
         end,
-
     [F(O) || O <- Array];
 
 
@@ -443,7 +425,7 @@ set_([Name], [_|_]=Array, Element, _Acc, _P, IsMap) ->
 
 % Path component is a Name, target is an ARRAY,  Set will recursively process
 % the selected objects containing a Member with name Name, with the ballance
-% ballan%% ce of the Path. 
+% ballance of the Path. 
 set_([Name|Keys], Array, Element, _Acc, P, IsMap) ->
     case found_elements(Name, Array) of
         undefined ->
@@ -451,7 +433,6 @@ set_([Name|Keys], Array, Element, _Acc, P, IsMap) ->
         ObjectSet -> 
             NewObjSet = set_(Keys, ObjectSet, Element, [], P, IsMap),
             merge_members(remove(Array,ObjectSet), NewObjSet)
-                
     end.
 
 
@@ -462,7 +443,7 @@ set_([Name|Keys], Array, Element, _Acc, P, IsMap) ->
 
 
 found_elements(Name, Array) ->
-    case elements_with(Name, Array) of
+    case values_at(Name, Array) of
         undefined -> undefined;
         EList -> 
             case lists:filter(fun(R) -> R /= undefined end, EList) of
@@ -473,36 +454,16 @@ found_elements(Name, Array) ->
     end.
              
 
-merge_members([#{}|_] = Maps, Target) ->
-    [maps:merge(M, Target) || M <- Maps];
-
-merge_members(Objects, M) ->
-    [merge_pl(O, M) || O <- Objects].
-
-merge_pl(P1, [{K,V}|Ts]) ->
-    merge_pl(lists:keystore(K, 1, P1, {K,V}), Ts);
-merge_pl(P1, []) ->
-    P1.
-
-
-remove([], Remove) -> Remove;
-remove(Objects, []) -> Objects;
-remove(Objects, Remove) -> 
-    lists:reverse(ordsets:to_list(
-                    ordsets:subtract(ordsets:from_list(Objects),
-                                     ordsets:from_list(Remove)))).
-
-
-% Return an Array of Elements, from Array, where the Element exists at Path.
-elements_with(Path, Array) ->
-    Elements = [walk([Path], Obj) || Obj <- Array, ?IS_OBJ(Obj)],
+% Return list of Values from Objects in Array who have Member with name = Name.
+values_at(Name, Array) ->
+    Elements = [walk([Name], Obj) || Obj <- Array, ?IS_OBJ(Obj)],
     case Elements of
         [] -> undefined;
         _ -> dont_nest(Elements)
     end.
 
 
-% Make sure that we always return an Array of Objects.
+% Make sure that we always return an Array - proplists can be over flattened.
 dont_nest(H) -> 
     A = lists:flatten(H),
     case A of
@@ -541,10 +502,29 @@ selector_to_element(last, L) ->
 
 selector_to_element(N, L)  when N =< length(L) ->
     lists:nth(N, L);
+
 selector_to_element(N, L)  when N > length(L) ->
     throw({error, index_out_of_bounds, N, L}).
 
 
+merge_members([#{}|_] = Maps, Target) ->
+    [maps:merge(M, Target) || M <- Maps];
+
+merge_members(Objects, M) ->
+    [merge_pl(O, M) || O <- Objects].
+
+merge_pl(P1, [{K,V}|Ts]) ->
+    merge_pl(lists:keystore(K, 1, P1, {K,V}), Ts);
+merge_pl(P1, []) ->
+    P1.
+
+
+remove([], Remove) -> Remove;
+remove(Objects, []) -> Objects;
+remove(Objects, Remove) -> 
+    lists:reverse(ordsets:to_list(
+                    ordsets:subtract(ordsets:from_list(Objects),
+                                     ordsets:from_list(Remove)))).
 
 
 index_to_n(_Array, first) -> 1;
@@ -564,6 +544,7 @@ make_binary({select, {K, V}}) ->
     {select, {make_binary(K), make_binary(V)}}.
 
 
+% to support erlang 17 need to roll my own get/3
 map_get(Key, Map, Default) ->
      try  maps:get(Key, Map) of
           Value ->
@@ -622,10 +603,10 @@ jwalk_alt_test_() ->
             ?_assertEqual(undefined,
                           jwalk:get({"glossary", "GlossDiv", "GlossList",
                                   "GlossEntry", "fizzle"}, Glossary)),
-            ?_assertException(error, {index_for_non_list, _},
+            ?_assertException(error, {index_for_non_array, _},
                               jwalk:get({"glossary", "GlossDiv", "GlossList",
                                       "GlossEntry", 1}, Glossary)),
-            ?_assertException(error, {index_for_non_list, _},
+            ?_assertException(error, {index_for_non_array, _},
                               jwalk:get({"glossary", "title", 1}, Glossary))]},
           {"jwalk:get from array by matching key",
            fun() ->
@@ -988,10 +969,10 @@ jwalk_map_test_() ->
             ?_assertEqual(undefined,
                           jwalk:get({"glossary", "GlossDiv", "GlossList",
                                   "GlossEntry", "fizzle"}, Glossary)),
-            ?_assertException(error, {index_for_non_list, _},
+            ?_assertException(error, {index_for_non_array, _},
                               jwalk:get({"glossary", "GlossDiv", "GlossList",
                                       "GlossEntry", 1}, Glossary)),
-            ?_assertException(error, {index_for_non_list, _},
+            ?_assertException(error, {index_for_non_array, _},
                               jwalk:get({"glossary", "title", 1}, Glossary))]},
           {"jwalk:get from array by matching key",
            fun() ->
