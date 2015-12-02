@@ -226,8 +226,8 @@ then: using jwalk:get(Paths, Object)
             [[{<<"name">>,<<"sebastian">>},
               {<<"location">>,<<"Germany">>}]]}]
 
-          11> jwalk:set_p({"users", {select, {"name", "sebastian"}}, "location"}, #{}, 
-          <<"Germany">>).
+         11> jwalk:set_p({"users", {select, {"name", "sebastian"}}, "location"}, #{}, 
+         <<"Germany">>).
           #{<<"users">> => [#{<<"location">> => <<"Germany">>,<<"name">> => <<"sebastian">>}]}
 
 
