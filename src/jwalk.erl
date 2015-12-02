@@ -361,7 +361,7 @@ set_([{select,{K,V}}=S], Array, Target, _Acc, _P, IsMap) when ?IS_OBJ(Target), i
     Found = selector_to_element(S, Array),
     Replace = case Found of
                   [] when IsMap ->
-                       [maps:merge(#{K =>V}, Target)];
+                       [maps:merge(maps:put(K,V, #{}), Target)];
                   []  -> 
                       [[{K,V} | Target]];
                   Found ->
