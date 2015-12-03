@@ -4,10 +4,10 @@
 [![Build Status](https://travis-ci.org/jr0senblum/jwalk.svg)](https://travis-ci.org/jr0senblum/jwalk)
 [![hex.pm version](https://img.shields.io/hexpm/v/jwalk.svg)](https://hex.pm/packages/jwalk)
 
-This work is a partial re-wrte of [ej](https://github.com/seth/ej) but focuses 
+This work is somewhat of a re-wrte of [ej](https://github.com/seth/ej) but focuses 
 on Map and Proplist representations of JSON - the type returned by
 [jsone](https://github.com/sile/jsone), for example. Anything that is good about
-this is due to him, anything bad is completely my fault.
+this is due to the contributors and maintiners of ej, anything bad is completely my fault.
 ###Dependencies
 Erlang 17.0 +
 
@@ -64,7 +64,7 @@ In addition to Names, a Path element can be
 * An integer index, or the atoms ``first`` and ``last`` which will select elements of a 
 JSON ARRAY 
 * ``{select, {"name","value"}}`` which will select a subset of JSON objects from an
-Array having a Member ``{"Name": Value}`` 
+Array that have a Member ``{"Name": "Value"}`` 
 
 For example
 

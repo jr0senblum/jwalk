@@ -8,12 +8,13 @@
 %%% This work is a derivitive of https://github.com/seth/ejm but focuses on 
 %%% map and property list representations of JSON.
 %%%
-%%% Functions take a tuple, where the elements of the tuple represent a Path 
-%%% into a JSON Object, and an encoded JSON structure (Proplist or Map) and 
-%%% return or delete the values indicated by the Path.
+%%% Functions always take at least two parameters: a first parameter which is a
+%%% tuple of elements representing a Path into a JSON Object, and a second 
+%%% parameter which is expected to be a proplist or map representation of a JSON
+%%% structure.
 %%%
-%%% The Path components are a tuple representation of a javascript-like, path: 
-%%% i.e., 
+%%% The Path components of the first parameter are a tuple representation of 
+%%% a javascript-like path: i.e., 
 %%%
 %%% Obj.cars.make.model would be expressed as {"cars","make","model"}
 %%%
@@ -23,7 +24,7 @@
 %%% element from a JSON array; or,
 %%%
 %%% {select, {"name","value"}} which will return a subset of JSON objects in 
-%%% an Array. For example, given
+%%% an Array that have a {"name":"value"} Member. For example, given
 %%%
 %%% ```
 %%% Cars = [{<<"cars">>, [ [{<<"color">>, <<"white">>}, {<<"age">>, <<"old">>}],
@@ -81,15 +82,13 @@
          (is_tuple(K) andalso (element(1, K) == select)))).
 
 
--type name()     :: binary() | string().
--type value()    :: binary() | string().
--type select()   :: {select, {name(), value()}}.
--type path_elt() :: name() | select() | 'first' | 'last' | non_neg_integer().
--type path()     :: {path_elt()}.
--type obj()      :: map() | list(tuple()) | [].
-
-
--type jwalk_return() :: map() | obj() | [map(),...] | [obj(),...] | undefined.
+-type name()   :: binary() | string().
+-type value()  :: binary() | string() | number() | true | false | null.
+-type select() :: {select, {name(), value()}}.
+-type p_elt()  :: name() | select() |'first' | 'last' | non_neg_integer() | new.
+-type path()   :: {p_elt()}.
+-type obj()    :: map() | list(tuple()) | [].
+-type jwalk_return() :: obj() | undefined | [obj() | value() | undefined,...].
 
 -export_type ([jwalk_return/0]).
 
@@ -109,25 +108,15 @@
 %%
 -spec delete(path(), obj()) -> jwalk_return().
 
-delete(Path, #{}=Obj) ->
-    do_set(to_binary_list(Path), Obj, delete, [], false, true);
-
-delete(Path, [{_,_}|_]=Obj) ->
-    do_set(to_binary_list(Path), Obj, delete, [], false, false);
-
-delete(Path, Obj) when is_list(Obj)->
-    case hd(lists:flatten(Obj)) of
-        #{} ->
+delete(Path, Obj) ->
+    case rep_type(Obj) of
+        map ->
             do_set(to_binary_list(Path), Obj, delete, [], false, true);
-        {_,_} ->
-            do_set(to_binary_list(Path), Obj, delete, [], false, false);
-        {} ->
+        proplist ->
             do_set(to_binary_list(Path), Obj, delete, [], false, false);
         _ ->
             error({illegal_object, Obj})
-    end;
-delete(_P, Obj) ->
-    error({illegal_object, Obj}).
+    end.
 
     
 %% -----------------------------------------------------------------------------
@@ -177,54 +166,33 @@ get(Path, Obj, Default) ->
 %%
 -spec set(path(), obj(), value()) -> jwalk_return().
 
-set(Path, #{}=Obj, Element) ->
-    do_set(to_binary_list(Path), Obj, Element, [], false, true);
-
-set(Path, [{_,_}|_]=Obj, Element) ->
-    do_set(to_binary_list(Path), Obj, Element, [], false, false);
-
-set(Path, Obj, Element) when is_list(Obj) ->
-    case hd(lists:flatten(Obj)) of
-        #{} ->
+set(Path, Obj, Element) ->
+    case rep_type(Obj) of
+        map ->
             do_set(to_binary_list(Path), Obj, Element, [], false, true);
-        {_,_} -> 
+        proplist -> 
             do_set(to_binary_list(Path), Obj, Element, [], false, false);
-        {} -> 
-            do_set(to_binary_list(Path), Obj, Element, [], false, false);
-        _ ->
+        error ->
             error({illegal_object, Obj})
-    end;
-
-set(_P, Obj, _E) ->
-    error({illegal_object, Obj}).
+    end.
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Sames ase {@link set/3. set/3} but creates intermediary elements 
+%% @doc Sames as {@link set/3. set/3} but creates intermediary elements 
 %% if necessary. Assumes `Obj' is (or will be) a Map.
 %%
 -spec set_p(path(), obj(), value()) -> jwalk_return().
 
-set_p(Path, #{}=Obj, Element) ->
+set_p(Path, Obj, Element) ->
+    case rep_type(Obj) of
+        map->
             do_set(to_binary_list(Path), Obj, Element, [], true, true);
-
-set_p(Path, [{_,_}|_]=Obj, Element) ->
-    do_set(to_binary_list(Path), Obj, Element, [], true, false);
-
-set_p(Path, Obj, Element) when is_list(Obj)->
-    case hd(lists:flatten(Obj)) of
-        #{} ->
-            do_set(to_binary_list(Path), Obj, Element, [], true, true);
-        {_,_} -> 
+        proplist ->
             do_set(to_binary_list(Path), Obj, Element, [], true, false);
-        {} -> 
-            do_set(to_binary_list(Path), Obj, Element, [], true, false);
-        _ ->
+        error ->
             error({illegal_object, Obj})
-    end;
+    end.
 
-set_p(_P, Obj, _E) ->
-    error({illegal_object, Obj}).
 
 
 do_set(Path, Obj,Element, Acc, P, IsMap) ->
@@ -240,7 +208,6 @@ do_set(Path, Obj,Element, Acc, P, IsMap) ->
 %% -----------------------------------------------------------------------------
 %%                WALK, and SET INTERNAL FUNCTIONS
 %% -----------------------------------------------------------------------------
-
 
 
 % Selecting a subset of an empty list is an empty list.
@@ -297,12 +264,20 @@ set_([Name], Map, delete, _Acc, _IsP, _IsMap) when is_map(Map) andalso
                                                    not ?IS_SELECTOR(Name) ->
     maps:remove(Name, Map);
 
+set_([{select,{_,_}}=S], Array, delete, _Acc, _IsP, _IsMap) ->
+    Found = selector_to_element(S, Array),
+    remove(Array, Found);
+
+set_([Name], [_|_]=Array, delete, _Acc, _IsP, _IsMap) ->
+    F = fun(#{}=Map)      -> maps:remove(Name, Map);
+           ([{_,_}|_]=Pl) -> lists:keydelete(Name, 1, Pl)
+        end,
+    [F(O) || O <- Array];
+
 
 % Final Path element: if it exist in the OBJECT replace or create it.
 set_([Name], [{}], Val, _Acc, _IsP, _IsMap) when not ?IS_SELECTOR(Name) ->
-
     [{Name, Val}];
-
 
 set_([Name], Obj, Val, _Acc, _IsP, false) when not ?IS_SELECTOR(Name) andalso 
                                                ?IS_PL(Obj) ->
@@ -313,14 +288,7 @@ set_([Name], Map, Val, _Acc, _P, true) when not ?IS_SELECTOR(Name) andalso
     maps:put(Name, Val, Map);
 
 
-
-
-
 % Iterate (proplist) Members for target. Replace value with recur call if found.
-set_([Name|Ks], [{}], Val, _Acc, true, IsMap) when not ?IS_SELECTOR(Name) ->
-    [{Name, set_(Ks, [{}], Val, [], true, IsMap)}];
-    
-
 set_([Name|Ks]=Path, [{N, V}|Ms], Val, Acc, IsP, false) when not ?IS_SELECTOR(Name)->
     case Name of
         N ->
@@ -331,6 +299,9 @@ set_([Name|Ks]=Path, [{N, V}|Ms], Val, Acc, IsP, false) when not ?IS_SELECTOR(Na
     end;
 
 % Intermediate Path element does not exist either create it or throw.
+set_([Name|Ks], [{}], Val, _Acc, true, IsMap) when not ?IS_SELECTOR(Name) ->
+    [{Name, set_(Ks, [{}], Val, [], true, IsMap)}];
+
 set_([Name|Ks], [], Val, Acc, IsP, false) when not ?IS_SELECTOR(Name) ->
     case IsP of
         true -> 
@@ -340,8 +311,7 @@ set_([Name|Ks], [], Val, Acc, IsP, false) when not ?IS_SELECTOR(Name) ->
             throw({no_path, Name})
     end;
 
-
-% Find Member for target. Replace Value with recursiver call. Create if appropriate.
+% map case
 set_([Name|Ks], Map, Val, _Acc, P, true) when not ?IS_SELECTOR(Name) andalso is_map(Map)->
     case map_get(Name, Map, not_found) of
         not_found -> 
@@ -363,6 +333,7 @@ set_([new], #{}, Element, _Acc, _P, _IsMap) when ?IS_J_TERM(Element) ->
 set_([new], [{}], Element, _Acc, _P, _IsMap)  when ?IS_J_TERM(Element) ->
     [Element];
 
+
 set_([S|_], Obj, _V, _A, _P, _IsMap) when ?IS_SELECTOR(S) andalso ?IS_OBJ(Obj)->
     throw({selector_used_on_object, S, Obj});
     
@@ -373,9 +344,6 @@ set_([S|_], Obj, _V, _A, _P, _IsMap) when ?IS_SELECTOR(S) andalso ?IS_OBJ(Obj)->
 set_([new], Array, Element, _Acc, _P, _IsMap) when is_list(Array) ->
     [Element|Array];
 
-set_([{select,{_,_}}=S], Array, delete, _Acc, _IsP, _IsMap) ->
-    Found = selector_to_element(S, Array),
-    remove(Array, Found);
 
 % The final path element is a 'select by member' applied to an ARRAY. Set the 
 % selected Objects with the Target
@@ -393,6 +361,7 @@ set_([{select,{K,V}}=S], Array, Target, _Acc, _P, IsMap) when ?IS_OBJ(Target), i
     
 set_([{select,{_,_}}], _Array, Target, _Acc, _P, _IsMap) ->
     throw({replacing_object_with_value, Target});
+
 
 % Select_by_member applied to an ARRAY. 
 set_([{select,{K,V}}=S|Ks], Array, Target, _Acc, P, IsMap) ->
@@ -429,15 +398,6 @@ set_([S|Path], Array, Element, _Acc, P, IsMap) when is_integer(S); S == last; S 
         _More ->
             throw({no_path, S})
     end;
-
-
-% Final Path component is a Name, target is an ARRAY, Delete selected Objects
-% pulled from the Array.
-set_([Name], [_|_]=Array, delete, _Acc, _IsP, _IsMap) ->
-    F = fun(#{}=Map)      -> maps:remove(Name, Map);
-           ([{_,_}|_]=Pl) -> lists:keydelete(Name, 1, Pl)
-        end,
-    [F(O) || O <- Array];
 
 
 % Final Path component is a Name, target is an ARRAY, replace/add Member to all
@@ -578,6 +538,17 @@ make_binary({select, {K, V}}) ->
     {select, {make_binary(K), make_binary(V)}}.
 
 
+% looks for the first object and returns its representation type.
+rep_type(#{}) -> map;
+rep_type([{}]) -> proplist;
+rep_type([{_,_}|_]) -> proplist;
+rep_type([#{}|_]) -> map;
+rep_type([[{_,_}|_]|_]) -> proplist;
+rep_type([[{}]|_TL]) -> proplist;
+rep_type([H|_TL]) when is_list(H) -> rep_type(H);
+rep_type(_) -> error.
+
+
 % to support erlang 17 need to roll my own get/3
 map_get(Key, Map, Default) ->
      try  maps:get(Key, Map) of
@@ -588,9 +559,6 @@ map_get(Key, Map, Default) ->
              Default
      end.
         
-
-
-
 
 
 -ifdef(TEST).
