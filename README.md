@@ -58,20 +58,22 @@ intermediate nodes as necessary returning the new strcutre
 ##Paths
 Paths into JSON objects are expressed using a tuple of Path elements, a 
 representation of a javascript-like path: i.e.,
-
 ``Obj.cars.make.model``  would be expressed as ``{"cars","make","model"}``  as 
-in,``jwalk:get({"cars","make","model"}, Obj)``. String Path elements can be 
-binary or not, they will be internally converted to binary regardless.
+in,``jwalk:get({"cars","make","model"}, Obj)``. Path elements representing
+JSON Member Names can be strings or binary, they will be internally converted to 
+binary regardless.
 
-In addition to Strings or Binaries, a Path element can be
+In addition to string/binary representation of Member Names, a Path element can 
+be
 
 * An integer index, or the atoms ``first`` and ``last`` which will select 
-elements of a JSON ARRAY 
+elements of a JSON Array.
 * ``{select, {"name","value"}}`` which will select a subset of JSON objects 
 from an Array that have a Member ``{"Name": "Value"}`` 
 
-For example
+Examples follow.
 
+###Usage Examples
     Cars = [{<<"cars">>, [ [{<<"color">>, <<"white">>}, {<<"age">>, <<"old">>}],
                            [{<<"color">>, <<"red">>},  {<<"age">>, <<"old">>}],
                            [{<<"color">>, <<"blue">>}, {<<"age">>, <<"new">>}]
@@ -79,10 +81,10 @@ For example
            }].
 
  Then 
-
-	1> jwalk:get({"cars", {select {"age", "old"}}}, Cars).
-	[[{<<"color">>, <<"white">>}, {<<"age">>, <<"old">>}],
-       [{<<"color">>, <<"red">>},   {<<"age">>, <<"old">>}]]
+       
+    1> jwalk:get({"cars", {select {"age", "old"}}}, Cars).
+    [[{<<"color">>, <<"white">>}, {<<"age">>, <<"old">>}],
+    [{<<"color">>, <<"red">>},   {<<"age">>, <<"old">>}]]
 
     2> jwalk:get({"cars", {select, {"age", "old"}}, 1}, Cars).
     [{<<"color">>,<<"white">>},{<<"age">>,<<"old">>}]
@@ -90,7 +92,7 @@ For example
     3> jwalk:get({"cars", {select, {"age", "old"}},first,"color"}, Cars).
     <<"white">>
 
-###Usage Examples
+
 Given:
 
     Obj = #{<<"widget">> => 
