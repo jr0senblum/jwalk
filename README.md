@@ -4,10 +4,12 @@
 [![Build Status](https://travis-ci.org/jr0senblum/jwalk.svg)](https://travis-ci.org/jr0senblum/jwalk)
 [![hex.pm version](https://img.shields.io/hexpm/v/jwalk.svg)](https://hex.pm/packages/jwalk)
 
-This work is somewhat of a re-wrte of [ej](https://github.com/seth/ej) but focuses 
-on Map and Proplist representations of JSON - the type returned by
+This work is somewhat of a re-wrte of [ej](https://github.com/seth/ej) but 
+focuses on Map and Proplist representations of JSON - the type returned by
 [jsone](https://github.com/sile/jsone), for example. Anything that is good about
-this is due to the contributors and maintiners of ej, anything bad is completely my fault.
+this is due to the contributors and maintiners of ej, anything bad is completely
+my fault.
+
 ###Dependencies
 Erlang 17.0 +
 
@@ -39,36 +41,38 @@ $ make start
 
 
 ##Functions
-The following functions are implemented where Path is a tuple representation of a 
-javascript-like path (see below) and Obj is a Map or Proplist representation of JSON:
+Functions always take at least two parameters: a first parameter which is a
+tuple of elements representing a Path into a JSON Object, and a second 
+parameter which is expected to be a proplist or map representation of a JSON
+structure.
 
-* ``jwalk:delete(Path, Obj)`` - Remove the value from Obj, at the location specified by 
-Path, and return a new Map or Proplist.
-* ``jwalk:get(Path, Obj)``, ``jwalk:get(Path, Obj, Default)``  - Return the value from Obj
-at the specificed Path, or undefined or Default.
-* ``jwalk:set(Path, Obj, Val)`` - Set a value in an Object and return the new structure.
-* ``jwalk:p_set(Path, Obj, Val)`` - Set a value in an Object creating intermediate nodes 
-as necessary returning the new strcutre
+* ``jwalk:delete(Path, Obj)`` - Remove the value from Obj, at the location 
+specified by Path, and return a new Map or Proplist.
+* ``jwalk:get(Path, Obj)``, ``jwalk:get(Path, Obj, Default)``  - Return the 
+value from Obj at the specificed Path, or undefined or Default.
+* ``jwalk:set(Path, Obj, Val)`` - Set a value in an Object and return the new 
+structure.
+* ``jwalk:set_p(Path, Obj, Val)`` - Set a value in an Object creating 
+intermediate nodes as necessary returning the new strcutre
 
 ##Paths
-In jwalk, paths into JSON objects are expressed using a tuple of keys or Path elements.
+Paths into JSON objects are expressed using a tuple of Path elements, a 
+representation of a javascript-like path: i.e.,
 
-The Path elements can be thought of as a tuple represention of a javascript-like 
-path: i.e.,
+``Obj.cars.make.model``  would be expressed as ``{"cars","make","model"}``  as 
+in,``jwalk:get({"cars","make","model"}, Obj)``. String Path elements can be 
+binary or not, they will be internally converted to binary regardless.
 
-``Obj.cars.make.model``  would be expressed as ``{"cars","make","model"}`` , as in
-``jwalk:get({"cars","make","model"}, Obj)``.
+In addition to Strings or Binaries, a Path element can be
 
-In addition to Names, a Path element can be
-
-* An integer index, or the atoms ``first`` and ``last`` which will select elements of a 
-JSON ARRAY 
-* ``{select, {"name","value"}}`` which will select a subset of JSON objects from an
-Array that have a Member ``{"Name": "Value"}`` 
+* An integer index, or the atoms ``first`` and ``last`` which will select 
+elements of a JSON ARRAY 
+* ``{select, {"name","value"}}`` which will select a subset of JSON objects 
+from an Array that have a Member ``{"Name": "Value"}`` 
 
 For example
 
-	Cars = [{<<"cars">>, [ [{<<"color">>, <<"white">>}, {<<"age">>, <<"old">>}],
+    Cars = [{<<"cars">>, [ [{<<"color">>, <<"white">>}, {<<"age">>, <<"old">>}],
                            [{<<"color">>, <<"red">>},  {<<"age">>, <<"old">>}],
                            [{<<"color">>, <<"blue">>}, {<<"age">>, <<"new">>}]
                          ]
