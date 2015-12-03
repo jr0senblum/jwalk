@@ -226,7 +226,7 @@ then: using jwalk:get(Paths, Object)
           <<"title">> => <<"Sample Konfabulator Widget">>,
           <<"width">> => 500}}}.
 
-          10> jwalk:set_p({"users", {select, {"name", "sebastian"}}, "location"}, [],       
+          10> jwalk:set_p({"users", {select, {"name", "sebastian"}}, "location"}, [{}],       
           <<"Germany">>).
           [{<<"users">>,
             [[{<<"name">>,<<"sebastian">>},

@@ -335,8 +335,22 @@ set_([new], [{}], Val, _Acc, _P, _IsMap)  when ?IS_J_TERM(Val) ->
     [Val];
 
 
+
+% Select_by_member applied to an empty Object. 
+set_([{select,{K,V}}=S|Ks], Obj, Val, _Acc, P, IsMap) when Obj == #{}; Obj == [{}]->
+    Objects = case P of
+                  true when IsMap ->
+                       [maps:put(K,V, #{})];
+                  true ->
+                      [[{K,V}]];
+                  false -> 
+                    throw({no_path, S})
+              end,
+    set_(Ks, Objects, Val, [], P, IsMap);
+
 set_([S|_], Obj, _V, _A, _P, _IsMap) when ?IS_SELECTOR(S) andalso ?IS_OBJ(Obj)->
     throw({selector_used_on_object, S, Obj});
+
     
 
 % ALL OBJECT CASES HANDLED ABOVE %
