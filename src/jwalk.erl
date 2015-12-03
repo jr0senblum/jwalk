@@ -3,9 +3,9 @@
 %%% @copyright (C) 2015, Jim Rosenblum
 %%% @doc
 %%% The jwalk modue is intended to make it easier to work with Erlang encodings
-%%% of JSON - either MAPS or PROPERTY LISTS. 
+%%% of JSON - either Maps or Proplists.
 %%%
-%%% This work is a derivitive of https://github.com/seth/ejm but focuses on 
+%%% This work is a derivitive of [https://github.com/seth/ej] but focuses on 
 %%% map and property list representations of JSON.
 %%%
 %%% Functions always take at least two parameters: a first parameter which is a
@@ -21,7 +21,7 @@
 %%% Path components may also contain:
 %%%
 %%% The atoms `` 'first' '' and `` 'last' '' or an integer index indicating an 
-%%% element from a JSON array; or,
+%%% element from a JSON Array; or,
 %%%
 %%% {select, {"name","value"}} which will return a subset of JSON objects in 
 %%% an Array that have a {"name":"value"} Member. For example, given
@@ -83,11 +83,12 @@
 
 
 -type name()   :: binary() | string().
--type value()  :: binary() | string() | number() | true | false | null.
+-type value()  :: binary() | string() | number() | true | false | null| integer().
 -type select() :: {select, {name(), value()}}.
 -type p_elt()  :: name() | select() |'first' | 'last' | non_neg_integer() | new.
 -type path()   :: {p_elt()}.
--type obj()    :: map() | list(tuple()) | [].
+-type pl()     :: [{}] | [[{name(), value()|[value()]}],...].
+-type obj()    :: map() | list(pl()).
 -type jwalk_return() :: obj() | undefined | [obj() | value() | undefined,...].
 
 -export_type ([jwalk_return/0]).
@@ -166,12 +167,12 @@ get(Path, Obj, Default) ->
 %%
 -spec set(path(), obj(), value()) -> jwalk_return().
 
-set(Path, Obj, Element) ->
+set(Path, Obj, Val) ->
     case rep_type(Obj) of
         map ->
-            do_set(to_binary_list(Path), Obj, Element, [], false, true);
+            do_set(to_binary_list(Path), Obj, Val, [], false, true);
         proplist -> 
-            do_set(to_binary_list(Path), Obj, Element, [], false, false);
+            do_set(to_binary_list(Path), Obj, Val, [], false, false);
         error ->
             error({illegal_object, Obj})
     end.
@@ -183,21 +184,21 @@ set(Path, Obj, Element) ->
 %%
 -spec set_p(path(), obj(), value()) -> jwalk_return().
 
-set_p(Path, Obj, Element) ->
+set_p(Path, Obj, Val) ->
     case rep_type(Obj) of
         map->
-            do_set(to_binary_list(Path), Obj, Element, [], true, true);
+            do_set(to_binary_list(Path), Obj, Val, [], true, true);
         proplist ->
-            do_set(to_binary_list(Path), Obj, Element, [], true, false);
+            do_set(to_binary_list(Path), Obj, Val, [], true, false);
         error ->
             error({illegal_object, Obj})
     end.
 
 
 
-do_set(Path, Obj,Element, Acc, P, IsMap) ->
+do_set(Path, Obj, Val, Acc, P, IsMap) ->
     try 
-        set_(Path, Obj, Element, Acc, P, IsMap)
+        set_(Path, Obj, Val, Acc, P, IsMap)
     catch
         throw:Error ->
             error(Error)
@@ -238,12 +239,12 @@ walk([S|Path], [_|_]=Array) when ?IS_SELECTOR(S) ->
     continue(selector_to_element(S, Array), Path);
 
 % ARRAY: Get all Values of Members with name = Name and continue as appropriate.
-walk([Name|Path], [_|_]=Ts) ->
-    continue(values_at(Name, Ts), Path);
+walk([Name|Path], [_|_]=Array) ->
+    continue(values_at(Name, Array), Path);
 
-% Target is something other than an ARRAY, but we have a selector.
-walk([S|_], T) when ?IS_SELECTOR(S) ->
-    throw({index_for_non_array, T}).
+% Element is something other than an ARRAY, but we have a selector.
+walk([S|_], Element) when ?IS_SELECTOR(S) ->
+    throw({index_for_non_array, Element}).
 
 
 continue(false, _Path)                         -> undefined;
@@ -289,49 +290,49 @@ set_([Name], Map, Val, _Acc, _P, true) when not ?IS_SELECTOR(Name) andalso
 
 
 % Iterate (proplist) Members for target. Replace value with recur call if found.
-set_([Name|Ks]=Path, [{N, V}|Ms], Val, Acc, IsP, false) when not ?IS_SELECTOR(Name)->
+set_([Name|Ps]=Path, [{N, V}|Ms], Val, Acc, IsP, false) when not ?IS_SELECTOR(Name)->
     case Name of
         N ->
-            NewVal = set_(Ks, V, Val, [], IsP, false),
+            NewVal = set_(Ps, V, Val, [], IsP, false),
             lists:append(lists:reverse(Acc),[{N, NewVal}|Ms]);
         _Other ->
             set_(Path, Ms, Val, [{N,V}|Acc], IsP, false)
     end;
 
 % Intermediate Path element does not exist either create it or throw.
-set_([Name|Ks], [{}], Val, _Acc, true, IsMap) when not ?IS_SELECTOR(Name) ->
-    [{Name, set_(Ks, [{}], Val, [], true, IsMap)}];
+set_([Name|Ps], [{}], Val, _Acc, true, IsMap) when not ?IS_SELECTOR(Name) ->
+    [{Name, set_(Ps, [{}], Val, [], true, IsMap)}];
 
-set_([Name|Ks], [], Val, Acc, IsP, false) when not ?IS_SELECTOR(Name) ->
+set_([Name|Ps], [], Val, Acc, IsP, false) when not ?IS_SELECTOR(Name) ->
     case IsP of
         true -> 
             lists:append(lists:reverse(Acc), 
-                         [{Name, set_(Ks,[{}], Val, [], IsP, false)}]);
+                         [{Name, set_(Ps,[{}], Val, [], IsP, false)}]);
         _ -> 
             throw({no_path, Name})
     end;
 
 % map case
-set_([Name|Ks], Map, Val, _Acc, P, true) when not ?IS_SELECTOR(Name) andalso is_map(Map)->
+set_([Name|Ps], Map, Val, _Acc, P, true) when not ?IS_SELECTOR(Name) andalso is_map(Map)->
     case map_get(Name, Map, not_found) of
         not_found -> 
             case P of
                 true ->
-                    maps:put(Name, set_(Ks, #{}, Val, [], P, true), Map);
+                    maps:put(Name, set_(Ps, #{}, Val, [], P, true), Map);
                 _ -> 
                     throw({no_path, Name})
             end;
         Value -> 
-            maps:put(Name, set_(Ks, Value, Val, [], P, true), Map)
+            maps:put(Name, set_(Ps, Value, Val, [], P, true), Map)
     end;
 
 
-% When final Path elemenet is NEW, just return the Element in an Array.
-set_([new], #{}, Element, _Acc, _P, _IsMap) when ?IS_J_TERM(Element) ->
-    [Element];
+% When final Path elemenet is NEW, just return the Value in an Array.
+set_([new], #{}, Val, _Acc, _P, _IsMap) when ?IS_J_TERM(Val) ->
+    [Val];
 
-set_([new], [{}], Element, _Acc, _P, _IsMap)  when ?IS_J_TERM(Element) ->
-    [Element];
+set_([new], [{}], Val, _Acc, _P, _IsMap)  when ?IS_J_TERM(Val) ->
+    [Val];
 
 
 set_([S|_], Obj, _V, _A, _P, _IsMap) when ?IS_SELECTOR(S) andalso ?IS_OBJ(Obj)->
@@ -340,31 +341,31 @@ set_([S|_], Obj, _V, _A, _P, _IsMap) when ?IS_SELECTOR(S) andalso ?IS_OBJ(Obj)->
 
 % ALL OBJECT CASES HANDLED ABOVE %
 
-% New applied to an ARRAY creates Element as the first element in  Array.
-set_([new], Array, Element, _Acc, _P, _IsMap) when is_list(Array) ->
-    [Element|Array];
+% New applied to an ARRAY creates Value as the first element in  Array.
+set_([new], Array, Val, _Acc, _P, _IsMap) when is_list(Array) ->
+    [Val|Array];
 
 
 % The final path element is a 'select by member' applied to an ARRAY. Set the 
-% selected Objects with the Target
-set_([{select,{K,V}}=S], Array, Target, _Acc, _P, IsMap) when ?IS_OBJ(Target), is_list(Array) ->
+% selected Objects with the Value
+set_([{select,{K,V}}=S], Array, Val, _Acc, _P, IsMap) when ?IS_OBJ(Val), is_list(Array) ->
     Found = selector_to_element(S, Array),
     Replace = case Found of
                   [] when IsMap ->
-                       [maps:merge(maps:put(K,V, #{}), Target)];
+                       [maps:merge(maps:put(K,V, #{}), Val)];
                   []  -> 
-                      [[{K,V} | Target]];
+                      [[{K,V} | Val]];
                   Found ->
-                      merge_members(Found, Target)
+                      merge_members(Found, Val)
               end,
     lists:append(remove(Array, Found), Replace);
     
-set_([{select,{_,_}}], _Array, Target, _Acc, _P, _IsMap) ->
-    throw({replacing_object_with_value, Target});
+set_([{select,{_,_}}], _Array, Val, _Acc, _P, _IsMap) ->
+    throw({replacing_object_with_value, Val});
 
 
 % Select_by_member applied to an ARRAY. 
-set_([{select,{K,V}}=S|Ks], Array, Target, _Acc, P, IsMap) ->
+set_([{select,{K,V}}=S|Ks], Array, Val, _Acc, P, IsMap) ->
     Found = selector_to_element(S, Array),
     Objects = case Found of
                   [] when P andalso IsMap ->
@@ -376,24 +377,24 @@ set_([{select,{K,V}}=S|Ks], Array, Target, _Acc, P, IsMap) ->
                   _ ->
                       Found
               end,
-    Replaced = set_(Ks, Objects, Target, [], P, IsMap),
+    Replaced = set_(Ks, Objects, Val, [], P, IsMap),
     lists:append(remove(Array, Found), Replaced);
 
 
 % Path component is index, either recurse on the selected Object, or replace it.
-set_([S|_], Array, _Element, _Acc, _P, _IsMap) when not is_list(Array), ?IS_SELECTOR(S) ->
+set_([S|_], Array, _Val, _Acc, _P, _IsMap) when not is_list(Array), ?IS_SELECTOR(S) ->
     throw({selector_used_on_non_array, S, Array});
 
-set_([S|Path], Array, Element, _Acc, P, IsMap) when is_integer(S); S == last; S == first ->
+set_([S|Path], Array, Val, _Acc, P, IsMap) when is_integer(S); S == last; S == first ->
     N = index_to_n(Array, S),
     case Path of
         [] ->
             lists:sublist(Array, 1, min(1, N-1)) ++
-                [Element] ++  
+                [Val] ++  
                 lists:sublist(Array, N + 1, length(Array));
         _More when P ; N =<length(Array) ->
             lists:sublist(Array, 1, min(1, N-1)) ++
-                [set_(Path, lists:nth(N, Array), Element, [], P, IsMap)] ++
+                [set_(Path, lists:nth(N, Array), Val, [], P, IsMap)] ++
                 lists:sublist(Array, N + 1, length(Array));
         _More ->
             throw({no_path, S})
@@ -402,30 +403,30 @@ set_([S|Path], Array, Element, _Acc, P, IsMap) when is_integer(S); S == last; S 
 
 % Final Path component is a Name, target is an ARRAY, replace/add Member to all
 % selected Objects pulled from the Array.
-set_([Name], [_|_]=Array, Element, _Acc, _P, IsMap) ->
+set_([Name], [_|_]=Array, Val, _Acc, _P, IsMap) ->
     case found_elements(Name, Array) of
         undefined when IsMap -> 
-             merge_members(Array, maps:put(Name, Element, #{}));
+             merge_members(Array, maps:put(Name, Val, #{}));
         undefined -> 
-            merge_members(Array, [{Name, Element}]);
+            merge_members(Array, [{Name, Val}]);
         ObjectSet -> 
-            case ?IS_OBJ(Element) of 
+            case ?IS_OBJ(Val) of 
                 true ->
-                    merge_members(remove(Array, ObjectSet), Element);
+                    merge_members(remove(Array, ObjectSet), Val);
                 false ->
-                    throw({replacing_object_with_value, Element})
+                    throw({replacing_object_with_value, Val})
             end
     end;
 
 % Path component is a Name, target is an ARRAY,  Set will recursively process
 % the selected objects containing a Member with name Name, with the ballance
 % ballance of the Path. 
-set_([Name|Keys], Array, Element, _Acc, P, IsMap) ->
+set_([Name|Keys], Array, Val, _Acc, P, IsMap) ->
     case found_elements(Name, Array) of
         undefined ->
             throw({no_path, Name});
         ObjectSet -> 
-            NewObjSet = set_(Keys, ObjectSet, Element, [], P, IsMap),
+            NewObjSet = set_(Keys, ObjectSet, Val, [], P, IsMap),
             merge_members(remove(Array,ObjectSet), NewObjSet)
     end.
 

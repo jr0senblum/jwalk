@@ -1,7 +1,7 @@
 {application, jwalk,
  [
   {description, "Helper module for working with Erlang proplist and map representations of JSON modled after ej"},
-  {vsn, "0.7.0"},
+  {vsn, "0.9.0"},
   {registered, []},
   {applications, [kernel, stdlib]},
   {env,[]},
