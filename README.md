@@ -11,11 +11,10 @@ this is due to the contributors and maintiners of ej, anything bad is completely
 my fault.
 
 ###Dependencies
-Erlang 17.0 +
+Other then the below, there are no dependencies. The source code is a single file which includes eunit test cases.
 
-Builds with rebar3 or Hex
-
-No other dependencies, the src code is a single file.
+* Erlang 17.0 +
+* Builds with rebar3 and uses the Hex package manager
 
 ###QuickStart
 ##### clone
@@ -47,26 +46,24 @@ parameter which is expected to be a proplist or map representation of a JSON
 structure.
 
 * ``jwalk:delete(Path, Obj)`` - Remove the value from Obj, at the location 
-specified by Path, and return a new Map or Proplist.
+specified by Path, and return a new Map or Proplist
 * ``jwalk:get(Path, Obj)``, ``jwalk:get(Path, Obj, Default)``  - Return the 
-value from Obj at the specificed Path, or undefined or Default.
-* ``jwalk:set(Path, Obj, Val)`` - Set a value in an Object and return the new 
-structure.
-* ``jwalk:set_p(Path, Obj, Val)`` - Set a value in an Object creating 
-intermediate nodes as necessary returning the new strcutre
+value from Obj, at the specificed Path, or undefined or Default
+* ``jwalk:set(Path, Obj, Val)`` - Set a value in an Object, at the specified
+path, and return the new structure
+* ``jwalk:set_p(Path, Obj, Val)`` - Set a value in an Object, at the specified
+path, creating intermediate nodes as necessary and returning the new strcuture
 
 ##Paths
-Paths into JSON objects are expressed using a tuple of Path elements, a 
+Paths into JSON Objects are expressed using a tuple of Path elements, a 
 representation of a javascript-like path: i.e.,
-``Obj.cars.make.model``  would be expressed as ``{"cars","make","model"}``  as 
-in,``jwalk:get({"cars","make","model"}, Obj)``. Path elements representing
-JSON Member Names can be strings or binary, they will be internally converted to 
+``Obj.cars.make.model``  would be expressed as ``{"cars","make","model"}``. Path elements representing JSON Member Names can be strings or binary, they will be internally converted to 
 binary regardless.
 
-In addition to string/binary representation of Member Names, a Path element can 
+In addition to string/binary representations of Member Names, a Path element can 
 be
 
-* An integer index, or the atoms ``first`` and ``last`` which will select 
+* An integer index, or the atoms ``first`` and ``last``, which will select 
 elements of a JSON Array.
 * ``{select, {"name","value"}}`` which will select a subset of JSON objects 
 from an Array that have a Member ``{"Name": "Value"}`` 

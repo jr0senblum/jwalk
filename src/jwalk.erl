@@ -606,6 +606,8 @@ jwalk_alt_test_() ->
             ?_assertEqual(undefined, jwalk:get({"widget", "keys", first}, Widget)),
             ?_assertEqual(undefined, jwalk:get({"widget", "keys", last}, Widget)),
             ?_assertEqual(undefined, jwalk:get({"widget", "keys", 2}, Widget)),
+            ?_assertEqual(not_found, jwalk:get({"widget", "keys", 2}, Widget, not_found)),
+            ?_assertEqual(5, jwalk:get({"widget", "values", last}, Widget, not_found)),
             ?_assertEqual([{<<"id">>, 5}],
                           jwalk:get({<<"objects">>, last}, ObjList)),
             ?_assertEqual([{<<"id">>, 1}],
@@ -666,6 +668,13 @@ jwalk_alt_test_() ->
                 Result = jwalk:get(Path, Data),
                 ?assertEqual([5], Result)
             end},
+          {"jwalk:set fails on non-object",
+           fun() ->
+                   ?assertException(error, {illegal_object, _},
+                                     jwalk:set({"does"}, [1,2], 1)),
+                   ?assertException(error, {illegal_object, _},
+                                     jwalk:set_p({"does"}, [1,2], 1))
+           end},
           {"jwalk:set new value in an object at a complex path",
            fun() ->
                    Path = {"menu", "popup", "menuitem", {select, {"value", "New"}}, "alt"},
@@ -883,6 +892,8 @@ jwalk_alt_test_() ->
            end},
           {"jwalk:remove",
            fun() ->
+                   ?assertException(error, {illegal_object,_},
+                                    jwalk:delete({<<"menu">>,<<"id">>,first},true)),
                    Path = {"glossary", "GlossDiv", "GlossList", "GlossEntry", "Abbrev"},
                    Orig = jwalk:get(Path, Glossary),
                    ?assert(undefined /= Orig),
@@ -976,6 +987,8 @@ jwalk_map_test_() ->
             ?_assertEqual(undefined, jwalk:get({"widget", "keys", first}, Widget)),
             ?_assertEqual(undefined, jwalk:get({"widget", "keys", last}, Widget)),
             ?_assertEqual(undefined, jwalk:get({"widget", "keys", 2}, Widget)),
+            ?_assertEqual(not_found, jwalk:get({"widget", "keys", 2}, Widget, not_found)),
+            ?_assertEqual(5, jwalk:get({"widget", "values", last}, Widget, not_found)),
             ?_assertEqual(#{<<"id">> => 5},
                           jwalk:get({<<"objects">>, last}, ObjList)),
             ?_assertEqual(#{<<"id">> => 1},
