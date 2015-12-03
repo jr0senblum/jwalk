@@ -861,7 +861,11 @@ jwalk_alt_test_() ->
                    Path2 = {"menu", "popup","menuitem",first},
                    Val =  [{<<"onclick">>, <<"CreateNewDoc()">>},{<<"value">>, <<"New">>}],
                    Menu1 = jwalk:set_p(Path, [{}], Val),
-                   ?assertMatch(Val, jwalk:get(Path2, Menu1))
+                   ?assertMatch(Val, jwalk:get(Path2, Menu1)),
+                   Path3 = {"users", {select, {"name", "sebastian"}}, "location"},
+                   Val3 = <<"Germany">>,
+                   Result3 = [{<<"users">>,[[{<<"name">>,<<"sebastian">>},{<<"location">>,<<"Germany">>}]]}],
+                   ?assertMatch(Result3, jwalk:set_p(Path3, [{}], Val3))
            end},
           {"jwalk:set using selector on non-array",
            fun() ->
@@ -1220,7 +1224,11 @@ jwalk_map_test_() ->
                    Path2 = {"menu", "popup","menuitem",first},
                    Val =  #{<<"onclick">> => <<"CreateNewDoc()">>,<<"value">> => <<"New">>},
                    Menu1 = jwalk:set_p(Path, #{}, Val),
-                   ?assertMatch(Val, jwalk:get(Path2, Menu1))
+                   ?assertMatch(Val, jwalk:get(Path2, Menu1)),
+                   Path3 = {"users", {select, {"name", "sebastian"}}, "location"},
+                   Val3 = <<"Germany">>,
+                   Result3 = #{<<"users">> => [#{<<"location">> => <<"Germany">>,<<"name">> => <<"sebastian">>}]},
+                   ?assertMatch(Result3, jwalk:set_p(Path3, #{}, Val3))
            end},
           {"jwalk:set using selector on non-array",
            fun() ->
