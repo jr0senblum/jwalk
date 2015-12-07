@@ -1,17 +1,18 @@
 #jwalk
-##Helper module for working with Erlang Proplist and Map representations of JSON
+##Helper module for working with Erlang Proplist, EEP18 and Map representations of JSON
 
 [![Build Status](https://travis-ci.org/jr0senblum/jwalk.svg)](https://travis-ci.org/jr0senblum/jwalk)
 [![hex.pm version](https://img.shields.io/hexpm/v/jwalk.svg)](https://hex.pm/packages/jwalk)
 
-This work is somewhat of a re-wrte of [ej](https://github.com/seth/ej) but 
-focuses on Map and Proplist representations of JSON - the type returned by
-[jsone](https://github.com/sile/jsone), for example. Anything that is good about
-this is due to the contributors and maintiners of ej, anything bad is completely
-my fault.
+This work is somewhat of a re-write of [ej](https://github.com/seth/ej) but 
+focuses on Map, EEP18 and Proplist representations of JSON - the type returned by
+[jsone](https://github.com/sile/jsone), or [jiffy](https://github.com/davisp/jiffy)
+for example. Anything that is good about this is due to the contributors and 
+maintainers of ej, anything bad is completely my fault.
 
 ###Dependencies
-Other then the below, there are no dependencies. The source code is a single file which includes eunit test cases.
+Other then the below, there are no dependencies. The source code is a single 
+file which includes eunit test cases.
 
 * Erlang 17.0 +
 * Builds with rebar3 and uses the Hex package manager
@@ -42,11 +43,11 @@ $ make start
 ##Functions
 Functions always take at least two parameters: a first parameter which is a
 tuple of elements representing a Path into a JSON Object, and a second 
-parameter which is expected to be a proplist or map representation of a JSON
-structure.
+parameter which is expected to be a proplist, map or eep18 representation of 
+a JSON structure.
 
 * ``jwalk:delete(Path, Obj)`` - Remove the value from Obj, at the location 
-specified by Path, and return a new Map or Proplist
+specified by Path, and return a structure
 * ``jwalk:get(Path, Obj)``, ``jwalk:get(Path, Obj, Default)``  - Return the 
 value from Obj, at the specificed Path, or undefined or Default
 * ``jwalk:set(Path, Obj, Val)`` - Set a value in an Object, at the specified
@@ -57,8 +58,9 @@ path, creating intermediate nodes as necessary and returning the new strcuture
 ##Paths
 Paths into JSON Objects are expressed using a tuple of Path elements, a 
 representation of a javascript-like path: i.e.,
-``Obj.cars.make.model``  would be expressed as ``{"cars","make","model"}``. Path elements representing JSON Member Names can be strings or binary, they will be internally converted to 
-binary regardless.
+``Obj.cars.make.model``  would be expressed as ``{"cars","make","model"}``. 
+Path elements representing JSON Member Names can be strings or binary, they 
+will be internally converted to binary regardless.
 
 In addition to string/binary representations of Member Names, a Path element can 
 be
@@ -79,7 +81,7 @@ Examples follow.
 
  Then 
        
-    1> jwalk:get({"cars", {select {"age", "old"}}}, Cars).
+    1> jwalk:get({"cars", {select, {"age", "old"}}}, Cars).
     [[{<<"color">>, <<"white">>}, {<<"age">>, <<"old">>}],
     [{<<"color">>, <<"red">>},   {<<"age">>, <<"old">>}]]
 
@@ -232,8 +234,3 @@ then: using jwalk:get(Paths, Object)
          11> jwalk:set_p({"users", {select, {"name", "sebastian"}}, "location"}, #{}, 
          <<"Germany">>).
           #{<<"users">> => [#{<<"location">> => <<"Germany">>,<<"name">> => <<"sebastian">>}]}
-
-
-
-
-
