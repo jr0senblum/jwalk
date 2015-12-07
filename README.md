@@ -6,7 +6,7 @@
 
 This work is somewhat of a re-write of [ej](https://github.com/seth/ej) but 
 focuses on Map, EEP18 and Proplist representations of JSON - the type returned by
-[jsone](https://github.com/sile/jsone), or [jiffy](https://github.com/davisp/jiffy)
+[jsone](https://github.com/sile/jsone) or [jiffy](https://github.com/davisp/jiffy)
 for example. Anything that is good about this is due to the contributors and 
 maintainers of ej, anything bad is completely my fault.
 
