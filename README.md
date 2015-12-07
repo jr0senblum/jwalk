@@ -5,10 +5,11 @@
 [![hex.pm version](https://img.shields.io/hexpm/v/jwalk.svg)](https://hex.pm/packages/jwalk)
 
 This work is somewhat of a re-write of [ej](https://github.com/seth/ej) but 
-focuses on Map, EEP18 and Proplist representations of JSON - the type returned by
+handles Map, EEP18 and Proplist representations of JSON - the type returned by
 [jsone](https://github.com/sile/jsone) or [jiffy](https://github.com/davisp/jiffy)
-for example. Anything that is good about this is due to the contributors and 
-maintainers of ej, anything bad is completely my fault.
+for example. It does not handle mochijson-style struct-in-tuple encoding. 
+Anything that is good about this is due to the contributors and maintainers of 
+ej, anything bad is completely my fault.
 
 ###Dependencies
 Other then the below, there are no dependencies. The source code is a single 
@@ -69,6 +70,9 @@ be
 elements of a JSON Array.
 * ``{select, {"name","value"}}`` which will select a subset of JSON objects 
 from an Array that have a Member ``{"Name": "Value"}`` 
+* new: for set/2 and set_p/2, when the final element of a path is the atom 
+`new', the supplied value is added to the stucture as the first element of
+an array, the array is created if necessary
 
 Examples follow.
 

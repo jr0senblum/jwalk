@@ -2,11 +2,12 @@
 %%% @author Jim Rosenblum <jrosenblum@prodigy.net>
 %%% @copyright (C) 2015, Jim Rosenblum
 %%% @doc
-%%% The jwalk modue is intended to make it easier to work with Erlang encodings
-%%% of JSON - either Maps, Proplists or eep18 style representations.
+%%% The jwalk module is intended to make it easier to work with Erlang encodings
+%%% of JSON - either Maps, Proplists or eep18-style representations.
 %%%
-%%% This work is a derivitive of [https://github.com/seth/ej] but handles 
-%%% maps, property list and eep18 representations of JSON.
+%%% This work is inspired (stolen) from [https://github.com/seth/ej] but handles 
+%%% maps, proplists and eep18 representations of JSON, but not mochijson's 
+%%% struct/tuple encodings.
 %%%
 %%% Functions always take at least two parameters: a first parameter which is a
 %%% tuple of elements representing a Path into a JSON Object, and a second 
@@ -25,6 +26,10 @@
 %%%
 %%% {select, {"name","value"}} which will return a subset of JSON objects in 
 %%% an Array that have a {"name":"value"} Member. For example, given
+%%%
+%%% new: for set/2 and set_p/2, when the final element of a path is the atom 
+%%% `new', the supplied value is added to the stucture as the first element of
+%%% an array, the array is created if necessary
 %%%
 %%% ```
 %%% Cars = {[{<<"cars">>, [ {[{<<"color">>, <<"white">>}, {<<"age">>, <<"old">>}]},
@@ -61,13 +66,15 @@
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
--define(IS_EEP(X),  (is_tuple(X) andalso 
+
+-define(IS_EEP(X),  (X == [{}] orelse 
+                     is_tuple(X) andalso 
                      is_list(element(1, X)) andalso 
-                    (hd(element(1,X)) == {} orelse 
+                     (hd(element(1,X)) == {} orelse 
                      tuple_size(hd(element(1,X))) == 2))).
 
--define(IS_PL(X), (X == {[]} orelse (is_list(X) andalso 
-                   is_tuple(hd(X)) andalso
+-define(IS_PL(X), (X == {[]} orelse 
+                   (is_list(X) andalso is_tuple(hd(X)) andalso
                    (tuple_size(hd(X)) == 0 orelse tuple_size(hd(X)) == 2)))).
 
 -define(IS_OBJ(X), (is_map(X) orelse ?IS_PL(X) orelse ?IS_EEP(X))).
@@ -92,7 +99,7 @@
 -type name()   :: binary() | string().
 -type value()  :: binary() | string() | number() | true | false | null| integer().
 -type select() :: {select, {name(), value()}}.
--type p_elt()  :: name() | select() |'first' | 'last' | non_neg_integer() | new.
+-type p_elt()  :: name() | select() |'first' | 'last' | non_neg_integer() | 'new'.
 -type path()   :: {p_elt()}.
 -type pl()     :: [{}] | [[{name(), value()|[value()]}],...].
 -type eep()    :: {[]} | [{[{name(), value()|[value()]}]},...].
@@ -127,7 +134,7 @@ delete(Path, Obj) ->
 
     
 %% -----------------------------------------------------------------------------
-%% @doc Return a value from 'Obj'. 
+%% @doc Return a value from an `Obj'. 
 %%
 %% Path elements that are strings can be binary or not - they will be converted 
 %% to binary if not.
@@ -144,8 +151,10 @@ get(Path, Obj) ->
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Same as {@link get/2. get/2}, but returns `Default' if `Path' does not
-%% exist in `Obj'. 
+%% @doc Return a value from an `Obj' or Default if value not found. 
+%%
+%% Path elements that are strings can be binary or not - they will be converted 
+%% to binary if not.
 %%
 -spec get(path(), obj(), Default::any()) -> jwalk_return().
 
@@ -165,42 +174,42 @@ get(Path, Obj, Default) ->
 %% structure. If the final element of the Path does not exist, it will be
 %% created. 
 %%
-%% The atom, `new', applied to an ARRAY, will create the Element as the first
-%% element in the Array.
+%% The atom, `new', applied to an ARRAY, will make the Value the first Element 
+%% in an Array, creating that Array if necessary.
 %%
 %% Path elements that are strings can be binary or not - they will be converted
 %% to binary if not.
 %%
 -spec set(path(), obj(), value()) -> jwalk_return().
 
-set(Path, Obj, Val) ->
+set(Path, Obj, Value) ->
     case rep_type(Obj) of
         error ->
             error({illegal_object, Obj});
         Type ->
-            do_set(to_binary_list(Path), Obj, Val, [], false, Type)
+            do_set(to_binary_list(Path), Obj, Value, [], false, Type)
     end.
 
 
 %% -----------------------------------------------------------------------------
-%% @doc Same  as {@link set/3. set/3} but creates intermediary elements 
-%% if necessary. 
+%% @doc Same as {@link set/3. set/3} but creates intermediary elements 
+%% as necessary. 
 %%
 -spec set_p(path(), obj(), value()) -> jwalk_return().
 
-set_p(Path, Obj, Val) ->
+set_p(Path, Obj, Value) ->
     case rep_type(Obj) of
         error ->
             error({illegal_object, Obj});
         Type ->
-            do_set(to_binary_list(Path), Obj, Val, [], true, Type)
+            do_set(to_binary_list(Path), Obj, Value, [], true, Type)
     end.
 
 
 
-do_set(Path, Obj, Val, Acc, P, RepType) ->
+do_set(Path, Obj, Value, Acc, P, RepType) ->
     try 
-        set_(Path, Obj, Val, Acc, P, RepType)
+        set_(Path, Obj, Value, Acc, P, RepType)
     catch
         throw:Error ->
             error(Error)
@@ -209,7 +218,7 @@ do_set(Path, Obj, Val, Acc, P, RepType) ->
 
 
 %% -----------------------------------------------------------------------------
-%%                WALK, SET and SET_P INTERNAL FUNCTIONS
+%%                WALK and SET_ INTERNAL FUNCTIONS
 %% -----------------------------------------------------------------------------
 
 
@@ -221,7 +230,7 @@ walk([{select, {_,_}}|_], [])->
 walk(_, []) ->
     undefined;
 
-% Path applied to null,  undefined.
+% Path applied to null, undefined.
 walk(_, null) -> undefined;
 
 walk([{select, {_, _}}|_], Obj) when ?IS_OBJ(Obj) ->
@@ -240,11 +249,12 @@ walk([S|Path], [_|_]=Array) when ?IS_SELECTOR(S) ->
 walk([S|Path], {[_|_]=Array}) when ?IS_SELECTOR(S) ->
     continue(subset_from_selector(S, Array), Path);
 
-% ARRAY with a Member Name: get all Values from Members with Name from Array.
+% ARRAY with a Member Name: get all Values from Members with Name from Objects
+% in Array. PL and eep versions.
 walk([Name|Path], [_|_]=Array) ->
     continue(values_from_member(Name, Array), Path);
 
-walk([Name|Path], {[_|_]=Array}) ->
+walk([Name|Path], {[_|_]=Array}) -> 
     continue(values_from_member(Name, Array), Path);
 
 % Element is something other than an ARRAY, but we have a selector.
@@ -261,7 +271,7 @@ continue(Value, Path)                          -> walk(Path, Value).
 
 
 
-% Final Path element: if it exists in the OBJECT delete it.
+% Final Path element: remove member with name = Name.
 set_([Name], Obj, delete, _Acc, _IsP, _RepType) when ?IS_OBJ(Obj) andalso
                                                        not ?IS_SELECTOR(Name) ->
     delete_member(Name, Obj);
@@ -271,6 +281,7 @@ set_([{select,{_,_}}=S], Array, delete, _Acc, _IsP, _RepType) ->
     Found = subset_from_selector(S, Array),
     remove(Array, Found);
 
+% FInal Path element: remove member with name = Name from all Objects in Array.
 set_([Name], [_|_]=Array, delete, _Acc, _IsP, _RepType) ->
     [delete_member(Name, O) || O <- Array];
 
@@ -297,8 +308,6 @@ set_([Name|Ps]=Path, [{N, V}|Ms], Val, Acc, IsP, proplist) when
             throw({no_path, Name})
     end;
 
-
-% Iterate (eep object) Members for target. Replace value with recur call if found.
 set_([Name|Ps]=Path, {[{N, V}|Ms]}, Val, Acc, IsP, eep) when 
                                                         not ?IS_SELECTOR(Name)->
     case Name of
@@ -314,12 +323,10 @@ set_([Name|Ps]=Path, {[{N, V}|Ms]}, Val, Acc, IsP, eep) when
             throw({no_path, Name})
     end;
 
-
 % Intermediate Path element does not exist either create it or throw.
 set_([Name|Ps], [{}], Val, _Acc, true, proplist) when not ?IS_SELECTOR(Name) ->
     [{Name, set_(Ps, [{}], Val, [], true, proplist)}];
 
-% Intermediate Path element does not exist either create it or throw.
 set_([Name|Ps], {[]}, Val, _Acc, true, eep) when not ?IS_SELECTOR(Name) -> 
     {[{Name, set_(Ps, {[]}, Val, [], true, eep)}]};
 
