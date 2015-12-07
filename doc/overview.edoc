@@ -5,5 +5,5 @@ jwalk
 @author Jim Rosenblum <jrosenblum@prodigy.net>
 @copyright 2015-2016 Jim Rosenblum
 @version v0.6.0
-@title Helper module for working with Erlang Proplist and Map representations of JSON
+@title Helper module for working with Erlang Proplist, EEP-18 and Map representations of JSON
 

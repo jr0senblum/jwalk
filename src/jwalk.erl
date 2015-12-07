@@ -95,7 +95,8 @@
 -type p_elt()  :: name() | select() |'first' | 'last' | non_neg_integer() | new.
 -type path()   :: {p_elt()}.
 -type pl()     :: [{}] | [[{name(), value()|[value()]}],...].
--type obj()    :: map() | list(pl()).
+-type eep()    :: {[]} | [{[{name(), value()|[value()]}]},...].
+-type obj()    :: map() | list(pl()) | list(eep()).
 -type jwalk_return() :: obj() | undefined | [obj() | value() | undefined,...].
 
 -export_type ([jwalk_return/0]).
@@ -224,7 +225,7 @@ walk(_, []) ->
 walk(_, null) -> undefined;
 
 walk([{select, {_, _}}|_], Obj) when ?IS_OBJ(Obj) ->
-    throw({selecor_used_on_object, Obj});
+    throw({selector_used_on_object, Obj});
 
 walk([S|_], Obj) when ?IS_OBJ(Obj), ?IS_SELECTOR(S) -> 
     throw({index_for_non_array, Obj});
