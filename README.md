@@ -48,13 +48,13 @@ parameter which is expected to be a proplist, map or eep18 representation of
 a JSON structure.
 
 * ``jwalk:delete(Path, Obj)`` - Remove the value from Obj, at the location 
-specified by Path, and return a structure
+specified by Path, and return a new structure
 * ``jwalk:get(Path, Obj)``, ``jwalk:get(Path, Obj, Default)``  - Return the 
-value from Obj, at the specificed Path, or undefined or Default
-* ``jwalk:set(Path, Obj, Val)`` - Set a value in an Object, at the specified
-path, and return the new structure
-* ``jwalk:set_p(Path, Obj, Val)`` - Set a value in an Object, at the specified
-path, creating intermediate nodes as necessary and returning the new strcuture
+Value from Obj, at the specificed Path, or undefined or Default
+* ``jwalk:set(Path, Obj, Value)`` - Set a Value in an Object, at the specified
+Path, and return the new structure
+* ``jwalk:set_p(Path, Obj, Value)`` - Set a Value in an Object, at the specified
+Path, creating intermediate nodes as necessary and returning the new strcuture
 
 ##Paths
 Paths into JSON Objects are expressed using a tuple of Path elements, a 
@@ -70,9 +70,9 @@ be
 elements of a JSON Array.
 * ``{select, {"name","value"}}`` which will select a subset of JSON objects 
 from an Array that have a Member ``{"Name": "Value"}`` 
-* new: for set/2 and set_p/2, when the final element of a path is the atom 
+* new: for set/2 and set_p/2, when the final element of a Path is the atom 
 `new', the supplied value is added to the stucture as the first element of
-an array, the array is created if necessary
+an Array, the Array is created if necessary
 
 Examples follow.
 

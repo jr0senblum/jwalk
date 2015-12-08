@@ -79,6 +79,10 @@
 
 -define(IS_OBJ(X), (is_map(X) orelse ?IS_PL(X) orelse ?IS_EEP(X))).
 
+-define('[{}]or{[]}'(X), (X == [{}] orelse X == {[]})).
+-define(EMPTY_OBJ(X), (X == [{}] orelse X == {[]} orelse X == #{})).
+-define(NOT_MAP_OBJ(X), (not is_map(X)) andalso ?IS_OBJ(X)).
+
 -define(IS_J_TERM(X), 
         (?IS_OBJ(X) orelse 
         is_number(X) orelse 
@@ -94,6 +98,8 @@
          is_integer(K) orelse
          (K == {select, all}) orelse
          (is_tuple(K) andalso (element(1, K) == select)))).
+
+-define(NOT_SELECTOR(K), not ?IS_SELECTOR(K)).
 
 
 -type name()   :: binary() | string().
@@ -271,70 +277,54 @@ continue(Value, Path)                          -> walk(Path, Value).
 
 
 
-% Final Path element: remove member with name = Name.
+% Final Path element: remove indicated member.
 set_([Name], Obj, delete, _Acc, _IsP, _RepType) when ?IS_OBJ(Obj) andalso
-                                                       not ?IS_SELECTOR(Name) ->
+                                                          ?NOT_SELECTOR(Name) ->
     delete_member(Name, Obj);
 
-% FInal Path element: remove all objects selected from Array.
-set_([{select,{_,_}}=S], Array, delete, _Acc, _IsP, _RepType) ->
+% Final Path element: remove selected Objects from Array
+set_([S], [_|_]=Array, delete, _Acc, _IsP, _RepType) when ?IS_SELECTOR(S)->
     Found = subset_from_selector(S, Array),
     remove(Array, Found);
 
-% FInal Path element: remove member with name = Name from all Objects in Array.
+% Final Path element: remove Objects from Array with Member whose name = Name.
 set_([Name], [_|_]=Array, delete, _Acc, _IsP, _RepType) ->
     [delete_member(Name, O) || O <- Array];
 
 
 % Final Path element: if it exists in the OBJECT replace or create it.
 set_([Name], Obj, Val, _Acc, _IsP, _RepType) when ?IS_OBJ(Obj) andalso
-                                                       not ?IS_SELECTOR(Name) ->
+                                                          ?NOT_SELECTOR(Name) ->
     add_member(Name, Val, Obj);
 
 
-% Iterate (proplist) Members for target. Replace value with recur call if found.
-set_([Name|Ps]=Path, [{N, V}|Ms], Val, Acc, IsP, proplist) when 
-                                                       not ?IS_SELECTOR(Name) ->
+% Iterate Members for one w/ name=Name. Replace value with recur call if found.
+set_([Name|Ps], Obj, Val, _Acc, true, RepType) when ?'[{}]or{[]}'(Obj), 
+                                                          ?NOT_SELECTOR(Name) ->
+    eep_or_pl(RepType, 
+              [{Name, set_(Ps, empty(RepType), Val, [], true, RepType)}]);
+
+
+set_([Name|Ps]=Path, Obj, Val, Acc, IsP, RType) when ?NOT_MAP_OBJ(Obj), ?NOT_SELECTOR(Name) ->
+    {N,V,Ms} = normalize(Obj),
     case Name of
         N ->
-            NewVal = set_(Ps, V, Val, [], IsP, proplist),
-            lists:append(lists:reverse(Acc),[{N, NewVal}|Ms]);
+            NewVal = set_(Ps, V, Val, [], IsP, RType),
+            eep_or_pl(RType,
+                      lists:append(lists:reverse(Acc),[{N, NewVal}|Ms]));
         _Other when Ms /= [] ->
-            set_(Path, Ms, Val, [{N,V}|Acc], IsP, proplist);
+            set_(Path, eep_or_pl(RType, 
+                                 Ms), Val, [{N,V}|Acc], IsP, RType);
         _Other when Ms == [], IsP == true->
-            lists:append(lists:reverse(Acc), 
-                         [{N,V}, {Name, set_(Ps,[{}], Val, [], IsP, proplist)}]);
+            eep_or_pl(RType, 
+                      lists:append(lists:reverse(Acc), 
+                                   [{N,V},  {Name, set_(Ps, empty(RType), Val, [], IsP, RType)}]));
         _Other when Ms == []  -> 
             throw({no_path, Name})
     end;
-
-set_([Name|Ps]=Path, {[{N, V}|Ms]}, Val, Acc, IsP, eep) when 
-                                                        not ?IS_SELECTOR(Name)->
-    case Name of
-        N ->
-            NewVal = set_(Ps, V, Val, [], IsP, eep), 
-            {lists:append(lists:reverse(Acc),[{N, NewVal}|Ms])};
-        _Other when Ms /= [] ->
-            set_(Path, {Ms}, Val, [{N,V}|Acc], IsP, eep);
-        _Other when Ms == [], IsP == true->
-            {lists:append(lists:reverse(Acc), 
-                         [{N,V}, {Name, set_(Ps, {[]}, Val, [], IsP, eep)}])};
-        _Other when Ms == []  -> 
-            throw({no_path, Name})
-    end;
-
-% Intermediate Path element does not exist either create it or throw.
-set_([Name|Ps], [{}], Val, _Acc, true, proplist) when not ?IS_SELECTOR(Name) ->
-    [{Name, set_(Ps, [{}], Val, [], true, proplist)}];
-
-set_([Name|Ps], {[]}, Val, _Acc, true, eep) when not ?IS_SELECTOR(Name) -> 
-    {[{Name, set_(Ps, {[]}, Val, [], true, eep)}]};
-
 
 % map case
-set_([Name|Ps], Map, Val, _Acc, P, map) when is_map(Map) andalso 
-                                                       not ?IS_SELECTOR(Name) -> 
-
+set_([Name|Ps], Map, Val, _Acc, P, map) when is_map(Map), ?NOT_SELECTOR(Name) ->
     case map_get(Name, Map, not_found) of
         not_found -> 
             case P of
@@ -349,19 +339,11 @@ set_([Name|Ps], Map, Val, _Acc, P, map) when is_map(Map) andalso
 
 
 % When final Path elemenet is NEW, just return the Value in an Array.
-set_([new], #{}, Val, _Acc, _P, _RepType) when ?IS_J_TERM(Val) ->
+set_([new], Obj, Val, _Acc, _P, _RType) when ?IS_J_TERM(Val), ?EMPTY_OBJ(Obj) ->
     [Val];
-
-set_([new], [{}], Val, _Acc, _P, _RepType)  when ?IS_J_TERM(Val) ->
-    [Val];
-
-set_([new], {[]}, Val, _Acc, _P, _RepType)  when ?IS_J_TERM(Val) ->
-    [Val];
-
     
 % Select_by_member applied to an empty Object. 
-set_([{select,{K,V}}=S|Ks], Obj, Val, _Acc, P, RepType) when 
-                                         Obj == #{}; Obj == [{}]; Obj == {[]} ->
+set_([{select,{K,V}}=S|Ks], Obj, Val, _Acc, P, RepType) when ?EMPTY_OBJ(Obj) ->
     Objects = case P of
                   true when RepType == map ->
                        [maps:put(K,V, #{})];
@@ -376,9 +358,7 @@ set_([{select,{K,V}}=S|Ks], Obj, Val, _Acc, P, RepType) when
 
 set_([S|_], Obj, _V, _A, _P, _IsMap) when ?IS_SELECTOR(S) andalso ?IS_OBJ(Obj)-> 
     throw({selector_used_on_object, S, Obj});
-
     
-
 % ALL OBJECT CASES HANDLED ABOVE %
 
 % New applied to an ARRAY creates Value as the first element in  Array.
@@ -389,7 +369,7 @@ set_([new], Array, Val, _Acc, _P, _RepType) when is_list(Array) ->
 % The final path element is a 'select by member' applied to an ARRAY. Set the 
 % selected Objects with the Value
 set_([{select,{K,V}}=S], Array, Val, _Acc, _P, RepType) when 
-                                        ?IS_OBJ(Val), is_list(Array) ->
+                                                 ?IS_OBJ(Val), is_list(Array) ->
     Found = subset_from_selector(S, Array),
     Replace = case Found of
                   [] when RepType == map ->
@@ -404,7 +384,7 @@ set_([{select,{K,V}}=S], Array, Val, _Acc, _P, RepType) when
     lists:append(remove(Array, Found), Replace);
 
 set_([{select,{K,V}}=S], {Array}, Val, _Acc, _P, RepType) when 
-                                        ?IS_OBJ(Val), is_list(Array) ->
+                                                 ?IS_OBJ(Val), is_list(Array) ->
     Found = subset_from_selector(S, Array),
     Replace = case Found of
                   [] when RepType == eep ->
@@ -424,10 +404,8 @@ set_([{select,{K,V}}=S|Ks], Array, Val, _Acc, P, RepType) ->
     Objects = case Found of
                   [] when P andalso (RepType == map) ->
                        [maps:put(K,V, #{})];
-                  [] when P andalso (RepType == proplist)->
-                      [[{K,V}]];
-                  [] when P andalso (RepType == eep)->
-                      [{[{K,V}]}];
+                  [] when P ->
+                      [ eep_or_pl(RepType, [{K,V}]) ];
                   [] -> 
                     throw({no_path, S});
                   _ ->
@@ -626,6 +604,21 @@ map_get(Key, Map, Default) ->
      end.
         
 
+eep_or_pl(proplist, Item) ->
+    Item;
+eep_or_pl(eep, Item) ->
+    {Item}.
+
+empty(proplist) ->
+    [{}];
+empty(eep) ->
+    {[]}.
+normalize([{N,V}|Ms]) ->
+    {N, V, Ms};
+normalize({[{N,V}|Ms]}) ->
+    {N, V, Ms}.
+
+
 
 -ifdef(TEST).
 
@@ -639,7 +632,7 @@ ej_eep_test_() ->
                       [ {[{<<"id">>, I}]} ||
                           I <- lists:seq(1, 5) ]}]},
          {Widget, Glossary, Menu, ObjList}
- end,
+ end, 
  fun({Widget, Glossary, Menu, ObjList}) ->
          [{"jwalk:get",
            [
@@ -674,7 +667,6 @@ ej_eep_test_() ->
 
             ?_assertException(error, {index_for_non_array, _},
                               jwalk:get({"glossary", "title", 1}, Glossary))]},
-
           {"jwalk:get from array by matching key",
            fun() ->
               Path1 = {"menu", "popup", "menuitem", {select, {"value", "New"}}},
