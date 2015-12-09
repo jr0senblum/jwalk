@@ -4,10 +4,10 @@
 [![Build Status](https://travis-ci.org/jr0senblum/jwalk.svg)](https://travis-ci.org/jr0senblum/jwalk)
 [![hex.pm version](https://img.shields.io/hexpm/v/jwalk.svg)](https://hex.pm/packages/jwalk)
 
-This work is somewhat of a re-write of [ej](https://github.com/seth/ej) but 
+This work is inspired (stolen from) by [ej](https://github.com/seth/ej) but 
 handles Map, EEP18 and Proplist representations of JSON - the type returned by
 [jsone](https://github.com/sile/jsone) or [jiffy](https://github.com/davisp/jiffy)
-for example. It does not handle mochijson-style struct-in-tuple encoding. 
+for example. It does not handle mochijson-style struct-in-tuple encodings. 
 Anything that is good about this is due to the contributors and maintainers of 
 ej, anything bad is completely my fault.
 
@@ -47,14 +47,14 @@ tuple of elements representing a Path into a JSON Object, and a second
 parameter which is expected to be a proplist, map or eep18 representation of 
 a JSON structure.
 
-* ``jwalk:delete(Path, Obj)`` - Remove the value from Obj, at the location 
-specified by Path, and return a new structure
-* ``jwalk:get(Path, Obj)``, ``jwalk:get(Path, Obj, Default)``  - Return the 
-Value from Obj, at the specificed Path, or undefined or Default
-* ``jwalk:set(Path, Obj, Value)`` - Set a Value in an Object, at the specified
-Path, and return the new structure
-* ``jwalk:set_p(Path, Obj, Value)`` - Set a Value in an Object, at the specified
-Path, creating intermediate nodes as necessary and returning the new strcuture
+* ``jwalk:delete(Path, Obj)`` - Removes the value at the location 
+specified by Path from Obj, and returns a new structure
+* ``jwalk:get(Path, Obj)``, ``jwalk:get(Path, Obj, Default)``  - Returns the 
+Value at the specificed Path from Ob, or undefined or Default if not found
+* ``jwalk:set(Path, Obj, Value)`` - Sets a Value in an Object at the specified
+Path, and returns the new structure
+* ``jwalk:set_p(Path, Obj, Value)`` - Sets a Value in an Object, at the specified
+Path, creating intermediate nodes as necessary and returns the new strcuture
 
 ##Paths
 Paths into JSON Objects are expressed using a tuple of Path elements, a 
@@ -73,6 +73,8 @@ from an Array that have a Member ``{"Name": "Value"}``
 * new: for set/2 and set_p/2, when the final element of a Path is the atom 
 `new', the supplied value is added to the stucture as the first element of
 an Array, the Array is created if necessary
+
+Path, string elements can be binary or not
 
 Examples follow.
 
