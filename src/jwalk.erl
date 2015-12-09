@@ -232,6 +232,10 @@ do_set(Path, Obj, Value, Acc, P, RepType) ->
 walk([{select, {_,_}}|_], [])->
     [];
 
+% Selecting nothing from anything is undefined.
+walk([], _)->
+    undefined;
+
 % Applying a Path to empty list, undefined.
 walk(_, []) ->
     undefined;
@@ -381,7 +385,12 @@ set_([{select,{K,V}}=S], Array, Val, _Acc, _P, RepType) when
                   Found -> 
                       merge_members(Found, Val)
               end,
-    lists:append(remove(Array, Found), Replace);
+    case Array == Found of
+        true -> Replace;
+        false ->
+             %       lists:append(remove(Array, Found), Replace)
+            replace_object(Array, Found, Replace)
+    end;
 
 set_([{select,{K,V}}=S], {Array}, Val, _Acc, _P, RepType) when 
                                                  ?IS_OBJ(Val), is_list(Array) ->
@@ -392,8 +401,14 @@ set_([{select,{K,V}}=S], {Array}, Val, _Acc, _P, RepType) when
                   Found -> 
                       merge_members(Found, Val)
               end,
-    {lists:append(remove(Array, Found), Replace)};
-    
+    case Array == Found of
+        true -> {Replace};
+        false ->  %   {lists:append(remove(Array, Found), Replace)}
+            {replace_object(Array, Found, Replace)}
+    end;
+
+
+
 set_([{select,{_,_}}], _Array, Val, _Acc, _P, _RepType) -> 
     throw({replacing_object_with_value, Val});
 
@@ -412,7 +427,13 @@ set_([{select,{K,V}}=S|Ks], Array, Val, _Acc, P, RepType) ->
                       Found
               end,
     Replaced = set_(Ks, Objects, Val, [], P, RepType),
-    lists:append(remove(Array, Found), Replaced);
+    case Found of 
+        [] ->
+            lists:append(Array, Replaced);
+        _ ->
+            replace_object(Array, Found, Replaced)
+
+    end;
 
 
 % Path component is index, either recurse on the selected Object, or replace it.
@@ -445,19 +466,72 @@ set_([Name], [_|_]=Array, Val, _Acc, _P, RepType) ->
              merge_members(Array, maps:put(Name, Val, #{}));
         undefined ->
             merge_members(Array, [{Name, Val}]);
-        ObjectSet -> 
+        Found -> 
             case ?IS_OBJ(Val) of 
                 true ->
-                    merge_members(remove(Array, ObjectSet), Val);
-                false ->
-                    throw({replacing_object_with_value, Val})
+                    merge_members(remove(Array, Found), Val);
+                false -> 
+                    replace_member(Name, Array, Val)
             end
+    end;
+
+
+% Path component is a Name, target is an ARRAY,  Set will recursively process
+% the selected objects containing a Member with name Name, with the ballance
+% ballance of the Path. 
+set_([Name|Keys], [_|_]=Array, Val, _Acc, P, RepType) ->
+    Found = found_elements(Name, Array),
+    Objects = case Found of
+                  undefined when P  andalso (RepType == map) ->
+                      maps:put(Name, set_(Keys, #{}, Val, [], P, RepType), #{});
+                  undefined when P ->
+                       eep_or_pl(RepType, [{Name, 
+                                             set_(Keys, empty(RepType), Val, [], P, RepType)}]);
+                  undefined ->
+                      throw({no_path, Name});
+              _ -> 
+                  set_(Keys, Found, Val, [], P, RepType)
+          end,
+    case Found of
+        undefined ->
+            merge_members(Array, Objects);
+        _ ->
+            merge_members(Array, [{Name, Objects}])
     end.
+
+
 
 
 %% ----------------------------------------------------------------------------
 %% INTERNAL FUNCTIONS
 %% ----------------------------------------------------------------------------
+replace_member(Name, Array, Val) ->
+    F = fun(Obj, Acc) when ?IS_OBJ(Obj) ->                
+                case get_member(Name, Obj) of
+                    undefined -> [Obj|Acc];
+                    _Value ->
+                        [add_member(Name, Val, Obj) | Acc]
+                end;
+           (Element, Acc) ->
+                [Element|Acc]
+        end,
+    lists:reverse(lists:foldl(F, [], Array)).
+
+
+replace_object(Array, [], New) ->
+     lists:append(Array,New);
+
+replace_object(Array, [Old], [New]) ->
+     F = fun(Obj) when Obj == Old -> New;
+             (Other) -> Other
+          end,
+      lists:map(F, Array);
+replace_object(Array, [Old], New) ->
+     F = fun(Obj) when Obj == Old -> New;
+             (Other) -> Other
+          end,
+      lists:map(F, Array).
+
 
 
 found_elements(Name, Array) ->
@@ -513,12 +587,16 @@ merge_members([#{}|_] = Maps, Target) ->
     [maps:merge(M, Target) || M <- Maps];
 merge_members(Objects, M) ->
     [merge_pl(O, M) || O <- Objects].
+
 merge_pl(P1, [{K,V}|Ts]) when ?IS_PL(P1) ->
     merge_pl(lists:keystore(K, 1, P1, {K,V}), Ts);
+
 merge_pl({P1}, [{K,V}|Ts]) ->
     merge_pl({lists:keystore(K, 1, P1, {K,V})}, Ts);
+
 merge_pl({P1}, {[{K,V}|Ts]}) ->
     merge_pl({lists:keystore(K, 1, P1, {K,V})}, {Ts});
+
 merge_pl(P1, {[]}) ->
     P1;
 merge_pl(P1, []) ->
@@ -531,6 +609,8 @@ remove(Objects, Remove) ->
     lists:reverse(ordsets:to_list(
                     ordsets:subtract(ordsets:from_list(Objects),
                                      ordsets:from_list(Remove)))).
+
+
 
 
 get_member(Name, #{}=Obj) ->
@@ -567,8 +647,12 @@ index_to_n(_Array, Integer) -> Integer.
 
 
 to_binary_list(Keys) ->
-    L = tuple_to_list(Keys),
+    L = case is_tuple(Keys) of
+            true -> tuple_to_list(Keys);
+            false -> Keys
+        end,
     lists:map(fun(K) -> make_binary(K) end, L).
+
 
 
 make_binary(K) when is_binary(K); is_number(K) -> K;
@@ -1678,4 +1762,543 @@ jwalk_map_test_() ->
          ]
  end
 }.
+
+ej_test_() ->
+{setup,
+ fun() ->
+         {ok, [Widget]} = file:consult("./test/widget.termss"),
+         {ok, [Glossary]} = file:consult("./test/glossary.termss"),
+         {ok, [Menu]} = file:consult("./test/menu.termss"),
+         ObjList = { [{<<"objects">>,
+                              [ { [{<<"id">>, I}]} ||
+                                  I <- lists:seq(1, 5) ]}]},
+         {Widget, Glossary, Menu, ObjList}
+ end,
+ fun({Widget, Glossary, Menu, ObjList}) ->
+         [{"jwalk:get",
+           [
+            ?_assertMatch({ [{_, _}|_]}, jwalk:get({"widget"}, Widget)),
+            ?_assertMatch({ [{_, _}|_]}, jwalk:get(["widget"], Widget)),
+
+            ?_assertEqual(<<"1">>, jwalk:get({"widget", "version"}, Widget)),
+            ?_assertEqual(<<"1">>, jwalk:get(["widget", "version"], Widget)),
+
+            ?_assertEqual(250, jwalk:get({"widget", "image", "hOffset"}, Widget)),
+            ?_assertEqual(250, jwalk:get(["widget", "image", "hOffset"], Widget)),
+
+            ?_assertEqual([1,2,3,4,5], jwalk:get({"widget", "values"}, Widget)),
+            ?_assertEqual([1,2,3,4,5], jwalk:get(["widget", "values"], Widget)),
+
+            ?_assertEqual(2, jwalk:get({"widget", "values", 2}, Widget)),
+            ?_assertEqual(4, jwalk:get({"widget", "values", 4}, Widget)),
+            ?_assertEqual(1, jwalk:get({"widget", "values", first}, Widget)),
+            ?_assertEqual(5, jwalk:get({"widget", "values", last}, Widget)),
+
+            ?_assertEqual(2, jwalk:get(["widget", "values", 2], Widget)),
+            ?_assertEqual(4, jwalk:get(["widget", "values", 4], Widget)),
+            ?_assertEqual(1, jwalk:get(["widget", "values", first], Widget)),
+            ?_assertEqual(5, jwalk:get(["widget", "values", last], Widget)),
+
+            ?_assertEqual({ [{<<"id">>, 5}]},
+                          jwalk:get({<<"objects">>, last}, ObjList)),
+            ?_assertEqual({ [{<<"id">>, 1}]},
+                          jwalk:get({<<"objects">>, first}, ObjList)),
+            ?_assertEqual(undefined, jwalk:get({"fizzle"}, Widget)),
+            ?_assertEqual(undefined, jwalk:get({"widget", "fizzle"}, Widget)),
+            ?_assertEqual(undefined,
+                          jwalk:get({"widget", "values", "fizzle"},Widget)),
+
+            ?_assertEqual(<<"SGML">>,
+                          jwalk:get({"glossary", "GlossDiv", "GlossList",
+                                  "GlossEntry", "Acronym"}, Glossary)),
+
+            ?_assertEqual(undefined,
+                          jwalk:get({"glossary", "GlossDiv", "GlossList",
+                                  "GlossEntry", "fizzle"}, Glossary)),
+
+            ?_assertEqual(undefined,
+                          jwalk:get({"not_present"}, {[]})),
+
+            ?_assertEqual(undefined,
+                          jwalk:get({"not_present"}, { []})),
+
+            ?_assertEqual(undefined,
+                          jwalk:get({"root", "not_present"}, { [{<<"root">>, null}]})),
+
+            ?_assertEqual(undefined, jwalk:get({[]}, Widget)),
+
+            ?_assertException(error, {index_for_non_array, _},
+                              jwalk:get({"glossary", "GlossDiv", "GlossList",
+                                      "GlossEntry", 1}, Glossary)),
+
+            ?_assertException(error, {index_for_non_array, _},
+                              jwalk:get({"glossary", "title", 1}, Glossary))]},
+
+          {"jwalk:get with default",
+           [
+            ?_assertEqual(<<"1">>, jwalk:get({"widget", "version"}, Widget, "you'll never see this default")),
+            ?_assertEqual(<<"defaults rock">>, jwalk:get({"widget", "NOT_PRESENT"}, Widget, <<"defaults rock">>)),
+            ?_assertEqual(<<"a default">>, jwalk:get({}, Widget, <<"a default">>)),
+            ?_assertEqual(<<"a default">>, jwalk:get({[]}, Widget, <<"a default">>))
+           ]},
+
+          {"jwalk:get with json_plist",
+           [
+            ?_assertEqual(<<"1">>, jwalk:get({"a"}, [{<<"a">>, <<"1">>}])),
+            ?_assertEqual(undefined, jwalk:get({"x"}, [{<<"a">>, <<"1">>}])),
+            ?_assertEqual(undefined, jwalk:get({"x"}, []))
+           ]},
+
+          {"jwalk:get from array by matching key",
+           fun() ->
+              Path1 = {"menu", "popup", "menuitem", {select, {"value", "New"}}},
+              ?assertMatch([{ [{<<"value">>,<<"New">>}|_]}], jwalk:get(Path1, Menu)),
+              Path2 = {"menu", "popup", "menuitem", {select, {"value", "New"}}, "onclick"},
+              ?assertEqual([<<"CreateNewDoc()">>], jwalk:get(Path2, Menu)),
+              PathNoneMatched = {"menu", "popup", "menuitem", {select, {"value", "NotThere"}}},
+              ?assertEqual([], jwalk:get(PathNoneMatched, Menu)),
+              PathDoesntExist = {"menu", "popup", "menuitem", {select, {"value", "NotThere"}}, "bar"},
+              ?assertEqual(undefined, jwalk:get(PathDoesntExist, Menu)),
+              Data = [
+                  { [{<<"match">>, <<"me">>}]},
+                  { [{<<"match">>, <<"me">>}]}
+              ],
+              ComplexBeginning = {{select, {"match", "me"}}},
+              ?assertMatch([{ _}, { _}], jwalk:get(ComplexBeginning, Data)),
+              ComplexBeginningDeeper = {{select, {"match", "me"}}, "match"},
+              ?assertMatch([<<"me">>, <<"me">>], jwalk:get(ComplexBeginningDeeper, Data))
+            end},
+
+          {"jwalk:get with multi-level array matching",
+           fun() ->
+                %% When doing multilevel deep array matching, we want the
+                %% array returned to be a single top level list, and not
+                %% a nested list of lists ...
+                Data = {[
+                   {<<"users">>, [
+                         {[{<<"id">>,<<"sebastian">>},
+                                  {<<"books">>, [
+                                     { [{<<"title">>, <<"faust">>},
+                                               {<<"rating">>, 5}]}
+                                  ]}
+                         ]}
+                   ]}
+                ]},
+                Path = {"users", {select, {"id", "sebastian"}}, "books",
+                        {select, {"title", "faust"}}, "rating"},
+                Result = jwalk:get(Path, Data),
+                ?assertEqual([5], Result)
+            end},
+
+          {"jwalk:get filter at top-level",
+           fun() ->
+                   Data = {[{<<"users">>,
+                                    [{[{<<"company">>,<<"opscode">>},
+                                              {<<"name">>,<<"seth">>}]},
+                                     {[{<<"location">>,<<"Germany">>},
+                                              {<<"name">>,<<"sebastian">>},
+                                              {<<"company">>,<<"aircloak">>}]}]}]},
+                   ?assertEqual([<<"opscode">>, <<"aircloak">>],
+                                jwalk:get({"users", "company"}, Data))
+           end},
+
+
+          {"jwalk:set, replacing existing value, keys is tuple",
+           fun() ->
+                   Path = {"widget", "window", "name"},
+                   CurrentValue = jwalk:get(Path, Widget),
+                   NewValue = <<"bob">>,
+                   ?assert(NewValue /= CurrentValue),
+                   Widget1 = jwalk:set(Path, Widget, NewValue),
+                   ?assertEqual(NewValue, jwalk:get(Path, Widget1)),
+                   % make sure the structure hasn't been disturbed
+                   Widget2 = jwalk:set(Path, Widget1, <<"main_window">>),
+                   ?assertEqual(Widget, Widget2)
+           end},
+
+          {"jwalk:set replacing existing value, keys is lists",
+           fun() ->
+                   Path = ["widget", "window", "name"],
+                   CurrentValue = jwalk:get(Path, Widget),
+                   NewValue = <<"bob">>,
+                   ?assert(NewValue /= CurrentValue),
+                   Widget1 = jwalk:set(Path, Widget, NewValue),
+                   ?assertEqual(NewValue, jwalk:get(Path, Widget1)),
+                   % make sure the structure hasn't been disturbed
+                   Widget2 = jwalk:set(Path, Widget1, <<"main_window">>),
+                   ?assertEqual(Widget, Widget2)
+           end},
+
+          {"jwalk:set, creating new value",
+           fun() ->
+                   Path = {"widget", "image", "newOffset"},
+                   Value = <<"YYY">>,
+                   ?assertEqual(undefined, jwalk:get(Path, Widget)),
+                   Widget1 = jwalk:set(Path, Widget, Value),
+                   ?assertEqual(Value, jwalk:get(Path, Widget1))
+           end},
+
+          {"jwalk:set, missing intermediate path",
+           fun() ->
+                   Path = {"widget", "middle", "nOffset"},
+                   Value = <<"YYY">>,
+                   ?assertEqual(undefined, jwalk:get(Path, Widget)),
+                   ?assertException(error, {no_path, _},
+                                    jwalk:set(Path, Widget, Value))
+           end},
+
+          {"jwalk:set top-level",
+           fun() ->
+                   OrigVal = jwalk:get({"widget", "version"}, Widget),
+                   NewVal = <<"2">>,
+                   NewWidget = jwalk:set({"widget", "version"}, Widget, NewVal),
+                   ?assertEqual(NewVal, jwalk:get({"widget", "version"}, NewWidget)),
+                   Reset = jwalk:set({"widget", "version"}, NewWidget, OrigVal),
+                   ?assertEqual(Widget, Reset)
+           end},
+
+          {"jwalk:set nested",
+           fun() ->
+                   NewVal = <<"JSON">>,
+                   Path = {"glossary", "GlossDiv", "GlossList", "GlossEntry",
+                           "ID"},
+                   Unchanged = jwalk:get({"glossary", "GlossDiv", "GlossList",
+                                       "GlossEntry", "SortAs"}, Glossary),
+                   Glossary1 = jwalk:set(Path, Glossary, NewVal),
+                   ?assertEqual(NewVal, jwalk:get(Path, Glossary1)),
+                   ?assertEqual(Unchanged, jwalk:get({"glossary", "GlossDiv",
+                                                   "GlossList", "GlossEntry",
+                                                   "SortAs"}, Glossary1)),
+                   Reset = jwalk:set(Path, Glossary1, <<"SGML">>),
+                   ?assertEqual(Glossary, Reset)
+           end},
+
+          {"jwalk:set list element",
+           fun() ->
+                   Orig = jwalk:get({"menu", "popup", "menuitem", 2}, Menu),
+                   New = jwalk:set({"onclick"}, Orig, <<"OpenFile()">>),
+                   Menu1 = jwalk:set({"menu", "popup", "menuitem", 2}, Menu, New),
+                   ?assertEqual(New,
+                                jwalk:get({"menu", "popup", "menuitem", 2}, Menu1)),
+                   Reset = jwalk:set({"menu", "popup", "menuitem", 2}, Menu1, Orig),
+                   ?assertEqual(Menu, Reset)
+           end},
+
+          {"jwalk:set list element path",
+           fun() ->
+                   Path = {"menu", "popup", "menuitem", 2, "onclick"},
+                   Orig = jwalk:get(Path, Menu),
+                   New = <<"OpenFile()">>,
+                   Menu1 = jwalk:set(Path, Menu, New),
+                   ?assertEqual(New, jwalk:get(Path, Menu1)),
+                   Reset = jwalk:set(Path, Menu1, Orig),
+                   ?assertEqual(Menu, Reset)
+           end},
+
+          {"jwalk:set list element path first, last",
+           fun() ->
+                   FPath = {"menu", "popup", "menuitem", first, "value"},
+                   LPath = {"menu", "popup", "menuitem", last, "value"},
+                   FMenu = jwalk:set(FPath, Menu, <<"create">>),
+                   LMenu = jwalk:set(LPath, FMenu, <<"kill">>),
+                   ?assertEqual(<<"create">>, jwalk:get(FPath, FMenu)),
+                   ?assertEqual(<<"create">>, jwalk:get(FPath, LMenu)),
+                   ?assertEqual(<<"kill">>, jwalk:get(LPath, LMenu))
+           end},
+
+          {"jwalk:set new list element",
+           fun() ->
+                   Path = {"menu", "popup", "menuitem", new},
+                   Path1 = {"menu", "popup", "menuitem", first},
+                   Menu1 = jwalk:set(Path, Menu, <<"first-item">>),
+                   ?assertEqual(<<"first-item">>, jwalk:get(Path1, Menu1)),
+                   List = jwalk:get({"menu", "popup", "menuitem"}, Menu1),
+                   ?assertEqual(4, length(List))
+           end},
+
+          {"jwalk:set_p creates intermediate missing nodes, keys is tuple",
+           fun() ->
+                   StartData = {[]},
+                   EndData = {[{<<"a">>,
+                      {[{<<"b">>,
+                          { [{<<"c">>, <<"value">>}]}
+                      }]}
+                   }]},
+                   Path = {"a", "b", "c"},
+                   Result = jwalk:set_p(Path, StartData, <<"value">>),
+                   ?assertEqual(EndData, Result),
+                   ?assertEqual(<<"value">>, jwalk:get(Path, Result)),
+                   Path2 = {"1", "2"},
+                   Result2 = jwalk:set_p(Path2, Result, <<"other-value">>),
+                   ?assertEqual(<<"other-value">>, jwalk:get(Path2, Result2)),
+                   %% Does not affect existing values
+                   ?assertEqual(<<"value">>, jwalk:get(Path, Result2))
+           end},
+
+           {"jwalk:set_p creates intermediate missing nodes, keys is lists",
+           fun() ->
+                   StartData = {[]},
+                   EndData = {[{<<"a">>,
+                      {[{<<"b">>,
+                          { [{<<"c">>, <<"value">>}]}
+                      }]}
+                   }]},
+                   Path = ["a", "b", "c"],
+                   Result = jwalk:set_p(Path, StartData, <<"value">>),
+                   ?assertEqual(EndData, Result),
+                   ?assertEqual(<<"value">>, jwalk:get(Path, Result)),
+                   Path2 = {"1", "2"},
+                   Result2 = jwalk:set_p(Path2, Result, <<"other-value">>),
+                   ?assertEqual(<<"other-value">>, jwalk:get(Path2, Result2)),
+                   %% Does not affect existing values
+                   ?assertEqual(<<"value">>, jwalk:get(Path, Result2))
+           end},
+
+
+          {"jwalk:set new value in an object at a complex path",
+           fun() ->
+                   Path = {"menu", "popup", "menuitem", {select, {"value", "New"}}, "alt"},
+                   Val = <<"helptext">>,
+                   Menu1 = jwalk:set(Path, Menu, Val),
+                   ?assertMatch([<<"helptext">>], jwalk:get(Path, Menu1))
+           end},
+
+          {"jwalk:set_p value in a non-existent object at a complex path",
+           fun() ->
+                   Path = {"menu", "popup", "menuitem", {select, {"value", "Edit"}}},
+                   Path2 = {"menu", "popup", "menuitem", {select, {"value", "Edit"}}, "text"},
+                   Path3 = {"menu", "popup", "menuitem", {select, {"value", "Edit"}}, "value"},
+                   Val = { [{<<"text">>, <<"helptext">>}]},
+                   Menu1 = jwalk:set_p(Path, Menu, Val),
+                   ?assertMatch([<<"helptext">>], jwalk:get(Path2, Menu1)),
+                   ?assertEqual([<<"Edit">>], jwalk:get(Path3, Menu1))
+           end},
+
+          {"jwalk:set new value in a object at a complex path",
+           fun() ->
+                   Path = {"menu", "popup", "menuitem", {select, {"value", "New"}}},
+                   Path2 = {"menu", "popup", "menuitem", {select, {"value", "New"}}, "onclick"},
+                   Val = { [{<<"onclick">>, <<"CreateDifferentNewDoct()">>}]},
+                   Menu1 = jwalk:set(Path, Menu, Val),
+                   ?assertEqual([<<"CreateDifferentNewDoct()">>], jwalk:get(Path2, Menu1)),
+                   Path3 = {"menu", "popup", "menuitem", {select,{"value", "New"}}, "speed"},
+                   ValHigh = <<"high">>,
+                   Menu2 = jwalk:set(Path3, Menu1, ValHigh),
+                   ?assertEqual([ValHigh], jwalk:get(Path3, Menu2))
+           end},
+
+          {"jwalk:set replace multiple children of a complex path",
+           fun() ->
+                   %% We want the ability to affect multiple array elements
+                   %% when a complex selector returns more than one match.
+                   %% In this case all the selected array elements should be
+                   %% replaced.
+                   StartData = { [
+                      { [{<<"match">>, <<"me">>}, {<<"param">>, 1}]},
+                      { [{<<"match">>, <<"me">>}, {<<"param">>, 2}]}
+                   ]},
+                   Path = {{select, {"match", "me"}}},
+                   Path2 = {{select, {"match", "me"}}, "more"},
+                   Val = { [{<<"more">>, <<"content">>}]},
+                   Result = jwalk:set(Path, StartData, Val),
+                   ?assertMatch([<<"content">>, <<"content">>], jwalk:get(Path2, Result))
+           end},
+
+          {"jwalk:set replace multiple children deep in a complex path",
+           fun() ->
+                   %% We want the ability to affect multiple array elements
+                   %% when a complex selector returns more than one match.
+                   %% In this case we show that the array does not have to
+                   %% be at the top level.
+                   StartData = { [{<<"parent">>, [
+                          { [{<<"match">>, <<"me">>}, {<<"param">>, 1}]},
+                          { [{<<"match">>, <<"me">>}, {<<"param">>, 2}]}
+                          ]}
+                   ]},
+                   Path = {"parent", {select, {"match", "me"}}},
+                   Path2 = {"parent", {select, {"match", "me"}}, "more"},
+                   Val = { [{<<"more">>, <<"content">>}]},
+                   EndData = jwalk:set(Path, StartData, Val),
+                   ?assertMatch([<<"content">>, <<"content">>], jwalk:get(Path2, EndData))
+           end},
+
+          {"jwalk:set doesn't alter order when setting a complex path",
+           fun() ->
+                   StartData = { [{<<"parent">>, [
+                          { [{<<"name">>, <<"alice">>}, {<<"param">>, 1}]},
+                          { [{<<"name">>, <<"bob">>}, {<<"param">>, 2}]},
+                          { [{<<"name">>, <<"clara">>}, {<<"param">>, 3}]}
+                          ]}
+                   ]},
+                   Path = {"parent", {select, {"name", "bob"}}, "param"},
+                   EndData = jwalk:set(Path, StartData, 4),
+                   Names = [ jwalk:get({"name"}, Elt) || Elt <- jwalk:get({"parent"}, EndData) ],
+                   ExpectNames = [<<"alice">>, <<"bob">>, <<"clara">>],
+                   ?assertEqual(ExpectNames, Names)
+           end},
+
+          {"jwalk:set should not allow replacing an array element at a complex path with a pure value",
+           fun() ->
+                   %% If the user has made a filtered selection on an array,
+                   %% then all the elements in the array are objects.
+                   %% Replacing the matched selection with a non-object value
+                   %% will break this constraint.
+                   Data = { [{ [{<<"match">>, <<"me">>}]}]},
+                   Path = {{select, {"match", "me"}}},
+                   Val = <<"pure-value-and-not-a-struct">>,
+                   ?assertException(error, {replacing_object_with_value, _},
+                                      jwalk:set(Path, Data, Val))
+           end},
+
+          {"jwalk:set a value within array",
+           fun() ->
+                   %% We should be able to set values on elements we
+                   %% have filtered out of an array, rather than just
+                   %% replacing them.
+                   StartData = {[
+                      {<<"users">>, [
+                            {[{<<"id">>,<<"sebastian">>}]}
+                      ]}
+                   ]},
+                   EndData = {[
+                      {<<"users">>, [
+                            {[{<<"id">>,<<"sebastian">>},
+                                     {<<"books">>, []}
+                            ]}
+                      ]}
+                   ]},
+                   Path = {"users", {select, {"id", "sebastian"}}, "books"},
+                   Val = [],
+                   Result = jwalk:set(Path, StartData, Val),
+                   ?assertEqual(EndData, Result)
+           end},
+
+          {"jwalk:set should throw error for trying to missing intermediate nodes",
+           fun() ->
+                   %% If we request a composite path that doesn't exist,
+                   %% and we are using set, rather than set_p, then we
+                   %% should get an error thrown at us.
+                   Path = {{select, {"id", "seb"}}},
+                   Val = { [{<<"continent">>, <<"europe">>}]},
+                   ?assertException(error, {no_path, _},
+                                    jwalk:set(Path, { []}, Val))
+           end},
+          {"jwalk:set_p should construct intermediate nodes if missing",
+           fun() ->
+                   %% If we request a composite path that doesn't exist,
+                   %% the missing nodes should be created for us dynamically
+                   %% to match the filtering criteria we are searching for.
+                   StartData = {[]},
+                   Path = {"users", {select, {"id", "seb"}}, "room",
+                           {select, {"room_id", "living-room"}},
+                           "books", {select, {"title", "faust"}}, "rating"},
+                   Val = 5,
+                   Result = jwalk:set_p(Path, StartData, Val),
+                   ?assertEqual([5], jwalk:get(Path, Result))
+           end},
+
+          {"jwalk:set_p should create intermediate nodes if missing in existing structures",
+           fun() ->
+                   %% If we request a composite path that doesn't exist,
+                   %% the missing nodes should be created for us dynamically
+                   %% to match the filtering criteria we are searching for.
+                   %% Furthermore, this should not affect old values already existing in the
+                   %% same structure.
+                   StartData = {[{<<"users">>,[
+                        {[{<<"rooms">>,[
+                                        {[{<<"books">>, [ {[{<<"rating">>,5},{<<"title">>,<<"faust">>}]} ]},
+                                          {<<"room_id">>,<<"livingroom">>}
+                                         ]}]},
+                          {<<"id">>,<<"seb">>}]}
+                                              ]}]},
+                   ValidPath = {"users", {select, {"id", "seb"}},
+                                "rooms", {select, {"room_id", "livingroom"}},
+                                "books", {select, {"title", "faust"}}, "rating"},
+                   ?assertEqual([5], jwalk:get(ValidPath, StartData)),
+                   NewPath = {"users", {select, {"id", "seb"}},
+                              "rooms", {select, {"room_id", "bathroom"}},
+                              "sink"},
+                   NewValue = true,
+                   Result = jwalk:set_p(NewPath, StartData, NewValue),
+                   ?assertEqual([true], jwalk:get(NewPath, Result)),
+                   OtherPath = {"users", {select, {"id", "seb"}},
+                                "computers", {select, {"laptop", true}}, "name"},
+                   OtherValue = <<"paris">>,
+                   Result1 = jwalk:set_p(OtherPath, Result, OtherValue),
+                   io:format("~p", [Result1]),
+                   ?assertEqual([<<"paris">>], jwalk:get(OtherPath, Result1)),
+                   %% Old values still valid
+                   ?assertEqual([5], jwalk:get(ValidPath, Result1)),
+                   ?assertEqual([true], jwalk:get(NewPath, Result1))
+           end},
+
+          {"jwalk:remove",
+           fun() ->
+                   Path = {"glossary", "GlossDiv", "GlossList", "GlossEntry", "Abbrev"},
+                   Orig = jwalk:get(Path, Glossary),
+                   ?assert(undefined /= Orig),
+                   Glossary1 = jwalk:delete(Path, Glossary),
+                   ?assertEqual(undefined, jwalk:get(Path, Glossary1)),
+                   % verify some structure
+                   ?assertEqual(<<"SGML">>, jwalk:get({"glossary", "GlossDiv",
+                                                    "GlossList", "GlossEntry",
+                                                    "Acronym"}, Glossary1)),
+                   ?assertEqual(<<"S">>, jwalk:get({"glossary", "GlossDiv",
+                                                 "title"}, Glossary1))
+           end},
+
+          {"jwalk:remove parameter at complex path",
+           fun() ->
+                   Path = {"menu", "popup", "menuitem", {select, {"value", "New"}}, "onclick"},
+                   Orig = jwalk:get(Path, Menu),
+                   ?assert(undefined /= Orig),
+                   Menu1 = jwalk:delete(Path, Menu),
+                   ?assertEqual([undefined], jwalk:get(Path, Menu1)),
+                   % verify some structure
+                   VerifyPath = {"menu", "popup", "menuitem", {select, {"value", "New"}}, "value"},
+                   ?assertEqual([<<"New">>], jwalk:get(VerifyPath, Menu1)),
+                   % verify that we didn't delete siblings
+                   VerifyOpen = {"menu", "popup", "menuitem", {select, {"value", "Open"}}, "onclick"},
+                   ?assertEqual([<<"OpenDoc()">>], jwalk:get(VerifyOpen, Menu1)),
+                   VerifyClose = {"menu", "popup", "menuitem", {select, {"value", "Close"}}, "onclick"},
+                   ?assertEqual([<<"CloseDoc()">>], jwalk:get(VerifyClose, Menu1))
+           end},
+
+          {"jwalk:remove object at complex path, keys is tuple",
+           fun() ->
+                   Path = {"menu", "popup", "menuitem", {select, {"value", "New"}}},
+                   Orig = jwalk:get(Path, Menu),
+                   ?assert([] /= Orig),
+                   Menu1 = jwalk:delete(Path, Menu),
+                   ?assertEqual([], jwalk:get(Path, Menu1)),
+                   % verify some structure
+                   VerifyPath = {"menu", "popup", "menuitem", {select, {"value", "New"}}, "value"},
+                   ?assertEqual(undefined, jwalk:get(VerifyPath, Menu1)),
+                   % % verify that we didn't delete siblings
+                   VerifyOpen = {"menu", "popup", "menuitem", {select, {"value", "Open"}}, "onclick"},
+                   ?assertEqual([<<"OpenDoc()">>], jwalk:get(VerifyOpen, Menu1)),
+                   VerifyClose = {"menu", "popup", "menuitem", {select, {"value", "Close"}}, "onclick"},
+                   ?assertEqual([<<"CloseDoc()">>], jwalk:get(VerifyClose, Menu1))
+           end},
+
+           {"jwalk:remove object at complex path, keys is list",
+           fun() ->
+                   Path = ["menu", "popup", "menuitem", {select, {"value", "New"}}],
+                   Orig = jwalk:get(Path, Menu),
+                   ?assert([] /= Orig),
+                   Menu1 = jwalk:delete(Path, Menu),
+                   ?assertEqual([], jwalk:get(Path, Menu1)),
+                   % verify some structure
+                   VerifyPath = ["menu", "popup", "menuitem", {select, {"value", "New"}}, "value"],
+                   ?assertEqual(undefined, jwalk:get(VerifyPath, Menu1)),
+                   % % verify that we didn't delete siblings
+                   VerifyOpen = ["menu", "popup", "menuitem", {select, {"value", "Open"}}, "onclick"],
+                   ?assertEqual([<<"OpenDoc()">>], jwalk:get(VerifyOpen, Menu1)),
+                   VerifyClose = ["menu", "popup", "menuitem", {select, {"value", "Close"}}, "onclick"],
+                   ?assertEqual([<<"CloseDoc()">>], jwalk:get(VerifyClose, Menu1))
+           end}
+         ]
+ end
+}.
+
 -endif.
