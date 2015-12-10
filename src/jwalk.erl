@@ -444,7 +444,6 @@ set_([Name], [_|_]=Array, Val, _Acc, _P, RType) ->
             end
     end;
 
-
 % Path component is a Name, target is an ARRAY,  Set will recursively process
 % the selected objects containing a Member with name Name, with the ballance
 % ballance of the Path. 
@@ -473,10 +472,17 @@ set_([Name|Keys], [_|_]=Array, Val, _Acc, P, RType) ->
 %% ----------------------------------------------------------------------------
 %% INTERNAL FUNCTIONS
 %% ----------------------------------------------------------------------------
+
+
+% Replace {Name, V} with {Name, Value} for every Object in the List, add if not
+% there.
+-spec replace_member(name(), [name()|obj()], value()) -> [name()|obj()].
+                                              
 replace_member(Name, Array, Val) ->
     F = fun(Obj, Acc) when ?IS_OBJ(Obj) ->                
                 case get_member(Name, Obj) of
-                    undefined -> [Obj|Acc];
+                    undefined -> 
+                        [Obj|Acc];
                     _Value ->
                         [add_member(Name, Val, Obj) | Acc]
                 end;
@@ -486,16 +492,20 @@ replace_member(Name, Array, Val) ->
     lists:reverse(lists:foldl(F, [], Array)).
 
 
-replace_object(Same, Same, New) -> 
-    New;
-replace_object(Array, [], New) ->
-     lists:append(Array,New);
+% Replace Old with New in Array.
+-spec replace_object([obj()|value()], [obj(),...], [obj(),...] | obj()) -> 
+                                                                [obj()|value()].
+
+replace_object(Same, Same, New) -> New;
+
+replace_object(Array, [], New) ->  lists:append(Array,New);
 
 replace_object(Array, [Old], [New]) ->
      F = fun(Obj) when Obj == Old -> New;
              (Other) -> Other
           end,
       lists:map(F, Array);
+
 replace_object(Array, [Old], New) ->
      F = fun(Obj) when Obj == Old -> New;
              (Other) -> Other
@@ -503,7 +513,9 @@ replace_object(Array, [Old], New) ->
       lists:map(F, Array).
 
 
-
+% Return Values from {Name, Values} from any Objects in the Array or undefined 
+% if none.
+-spec found_elements(name(), [obj()|value()]) -> jwalk_return() | undefined.
 found_elements(Name, Array) ->
     case values_from_member(Name, Array) of
         undefined -> 
@@ -517,7 +529,7 @@ found_elements(Name, Array) ->
     end.
              
 
-% Return list of Results from trying to get Name from each Obj an Array.
+% Return list of Results from trying to get(Name, Obj) from each Obj an Array.
 -spec values_from_member(name(), [obj(),...]) -> [obj(),...] | undefined.
 
 values_from_member(Name, Array) ->
@@ -541,7 +553,7 @@ dont_nest(H) ->
 
 
 % Select out subset of Object/s that contain Member {K:V}
--spec subset_from_selector(select(), [obj()]) -> [obj()].
+-spec subset_from_selector(select(), [obj()|value()]) -> [obj()].
 
 subset_from_selector({select, {K,V}}, Array) -> 
     F = fun(Obj) when ?IS_OBJ(Obj) -> 
@@ -551,9 +563,8 @@ subset_from_selector({select, {K,V}}, Array) ->
     lists:filter(F, Array).
 
 
-
 % Select out nth Object from Array.
--spec nth(p_index(), [obj()]) -> obj().
+-spec nth(p_index(), [obj()|value()]) -> obj().
 
 nth(first, L) ->
     hd(L);
@@ -574,6 +585,21 @@ remove(Objects, Remove) ->
 
 
 %% Representation-specifc object manipulation: adding, deleteing members, etc.
+
+eep_or_pl(proplist, Item) ->  Item;
+eep_or_pl(eep, Item)      -> {Item}.
+
+
+empty(proplist) -> [{}];
+empty(eep)      -> {[]};
+empty(map)      -> #{}.
+
+
+normalize_members([{N,V}|Ms]) ->
+    {N, V, Ms};
+normalize_members({[{N,V}|Ms]}) ->
+    {N, V, Ms}.
+
 
 -spec get_member(name(), obj()) -> term() | 'undefined'.
 get_member(Name, #{}=Obj) ->
@@ -614,10 +640,12 @@ add_member(Name, Val, {[{_,_}|_]=PrpLst}) ->
     {lists:keystore(Name, 1, PrpLst, {Name, Val})}.
 
 
+-spec merge_members(obj(), [tuple()]|{[tuple()]}) -> obj().
 merge_members([#{}|_] = Maps, Target) ->
     [maps:merge(M, Target) || M <- Maps];
 merge_members(Objects, M) ->
     [merge_pl(O, M) || O <- Objects].
+
 
 merge_pl(P1, [{K,V}|Ts]) when ?IS_PL(P1) ->
     merge_pl(lists:keystore(K, 1, P1, {K,V}), Ts);
@@ -683,23 +711,7 @@ map_get(Key, Map, Default) ->
      end.
         
 
-eep_or_pl(proplist, Item) ->
-    Item;
-eep_or_pl(eep, Item) ->
-    {Item}.
 
-empty(proplist) ->
-    [{}];
-empty(eep) ->
-    {[]};
-empty(map) ->
-    #{}.
-
-
-normalize_members([{N,V}|Ms]) ->
-    {N, V, Ms};
-normalize_members({[{N,V}|Ms]}) ->
-    {N, V, Ms}.
 
 
 
