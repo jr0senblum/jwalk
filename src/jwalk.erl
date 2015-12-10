@@ -100,17 +100,23 @@
          (K == {select, all}) orelse
          (is_tuple(K) andalso (element(1, K) == select)))).
 
+-define(IS_INDEX(K), 
+        (K == first) orelse
+        (K == last) orelse 
+        is_integer(K)).
+
 -define(NOT_SELECTOR(K), (not ?IS_SELECTOR(K))).
 
-
--type name()   :: binary() | string().
--type value()  :: binary() | string() | number() | true | false | null| integer().
--type select() :: {select, {name(), value()}}.
--type p_elt()  :: name() | select() |'first' | 'last' | non_neg_integer() | 'new'.
--type path()   :: {p_elt()} | [p_elt()].
--type pl()     :: [{}] | [[{name(), value()|[value()]}],...].
--type eep()    :: {[]} | [{[{name(), value()|[value()]}]},...].
--type obj()    :: map() | list(pl()) | list(eep()).
+-type obj_type() :: map | proplist | eep.
+-type name()     :: binary() | string().
+-type value()    :: binary() | string() | number() | delete | true | false | null| integer().
+-type select()   :: {select, {name(), value()}}.
+-type p_index()  :: 'first' | 'last' | non_neg_integer().
+-type p_elt()    :: name() | select() | p_index() | 'new'.
+-type path()     :: {p_elt()} | [p_elt(),...].
+-type pl()       :: [{}] | [{name(), value()  | pl() | [pl()]},...].
+-type eep()      :: {[]} | {[{name(), value() | eep() | [eep(),...]}]}.
+-type obj()      :: map() | pl() | eep() | [pl(),...] | [eep(),...].
 -type jwalk_return() :: obj() | undefined | [obj() | value() | undefined,...].
 
 -export_type ([jwalk_return/0]).
@@ -213,7 +219,7 @@ set_p(Path, Obj, Value) ->
     end.
 
 
-
+-spec do_set(path(), obj(), value(), [tuple()], boolean(), obj_type()) -> jwalk_return().
 do_set(Path, Obj, Value, Acc, P, RepType) ->
     try 
         set_(Path, Obj, Value, Acc, P, RepType)
@@ -228,20 +234,14 @@ do_set(Path, Obj, Value, Acc, P, RepType) ->
 %%                WALK and SET_ INTERNAL FUNCTIONS
 %% -----------------------------------------------------------------------------
 
+-spec walk(path(), obj()|[]) -> jwalk_return().
+% Some base cases.
+walk([{select, {_,_}}|_], []) ->  [];
 
-% Selecting a subset of an empty list is an empty list.
-walk([{select, {_,_}}|_], [])->
-    [];
+walk([], _) -> undefined;
 
-% Selecting nothing from anything is undefined.
-walk([], _)->
-    undefined;
+walk(_, []) -> undefined;
 
-% Applying a Path to empty list, undefined.
-walk(_, []) ->
-    undefined;
-
-% Path applied to null, undefined.
 walk(_, null) -> undefined;
 
 walk([{select, {_, _}}|_], Obj) when ?IS_OBJ(Obj) ->
@@ -253,24 +253,29 @@ walk([S|_], Obj) when ?IS_OBJ(Obj), ?IS_SELECTOR(S) ->
 walk([Name|Path], Obj) when ?IS_OBJ(Obj) -> 
     continue(get_member(Name, Obj), Path);
 
-% ARRAY with a Selector: get subset matching selector
-walk([S|Path], [_|_]=Array) when ?IS_SELECTOR(S) ->
+walk([S|Path], {[_|_]=Array}) ->
+    walk([S|Path], Array);
+
+% ARRAY with a Selector/Index: continue with selected subset.
+walk([{select, {_,_}}=S|Path], [_|_]=Array) ->
     continue(subset_from_selector(S, Array), Path);
 
-walk([S|Path], {[_|_]=Array}) when ?IS_SELECTOR(S) ->
-    continue(subset_from_selector(S, Array), Path);
+walk([S|Path], [_|_]=Array) when ?IS_INDEX(S) ->
+    continue(nth(S, Array), Path);
 
-% ARRAY with a Member Name: get all Values from Members with Name from Objects
-% in Array. PL and eep versions.
+% ARRAY with a Member Name: continue with the values from the Objects in the
+% Array that have Member = {Name, Value}.
 walk([Name|Path], [_|_]=Array) ->
-    continue(values_from_member(Name, Array), Path);
-
-walk([Name|Path], {[_|_]=Array}) -> 
     continue(values_from_member(Name, Array), Path);
 
 % Element is something other than an ARRAY, but we have a selector.
 walk([S|_], Element) when ?IS_SELECTOR(S) ->
-    throw({index_for_non_array, Element}).
+    case S of
+        {select, {_,_}} ->
+            throw({selector_for_non_array, Element});
+        _ ->
+            throw({index_for_non_array, Element})
+    end.
 
 
 continue(false, _Path)                         -> undefined;
@@ -282,15 +287,19 @@ continue(Value, Path)                          -> walk(Path, Value).
 
 
 
-% Final Path element: remove indicated member.
+-spec set_(path(), obj()|[], term(), [tuple()], boolean(), obj_type()) -> 
+                                                                 jwalk_return().
+
+% Final Path element: DELETE.
 set_([Name], Obj, delete, _Acc, _IsP, _RType) when ?IS_OBJ(Obj) andalso
                                                           ?NOT_SELECTOR(Name) ->
     delete_member(Name, Obj);
 
-% Final Path element: remove selected Objects from Array
-set_([S], [_|_]=Array, delete, _Acc, _IsP, _RType) when ?IS_SELECTOR(S)->
-    Found = subset_from_selector(S, Array),
-    remove(Array, Found);
+set_([S], [_|_]=Array, delete, _Acc, _IsP, _RType) when ?IS_INDEX(S)->
+    remove(Array, nth(S, Array));
+
+set_([{select, {_,_}}=S], [_|_]=Array, delete, _Acc, _IsP, _RType) ->
+    remove(Array, subset_from_selector(S, Array));
 
 % Final Path element: remove Objects from Array with Member whose name = Name.
 set_([Name], [_|_]=Array, delete, _Acc, _IsP, _RType) ->
@@ -347,10 +356,8 @@ set_([new], Obj, Val, _Acc, _P, _RType) when ?IS_J_TERM(Val), ?EMPTY_OBJ(Obj) ->
 % Select_by_member applied to an empty Object. 
 set_([{select,{K,V}}=S|Ks], Obj, Val, _Acc, P, RType) when ?EMPTY_OBJ(Obj) ->
     Object = case P of
-                  true when RType == map ->
-                       [maps:put(K,V, #{})];
-                  true ->
-                      [ eep_or_pl(RType, [{K,V}]) ];
+                 true ->
+                     [add_member(K, V, empty(RType))];
                   false -> 
                     throw({no_path, S})
               end,
@@ -368,20 +375,19 @@ set_([new], [_|_]=Array, Val, _Acc, _P, _RType) ->
 
 % Final Path element is 'select by member' applied to ARRAY. Set / replace the 
 % selected Objects with the Value
+set_([{select,{_,_}}=S], {[_|_]=Array}, Val, Acc, P, RType) when ?IS_OBJ(Val) ->
+    set_([S], Array, Val, Acc, P, RType);
+
 set_([{select,{K,V}}=S], [_|_]=Array, Val, _Acc, _P, RType) when ?IS_OBJ(Val) ->
     Found = subset_from_selector(S, Array),
     Replace = case Found of
-                  [] when RType == map ->
-                      [maps:merge(maps:put(K,V, #{}), Val)];
-                  [] ->
-                      merge_members([eep_or_pl(RType, [{K,V}])], Val);
+                  [] -> 
+                      merge_members([add_member(K, V, empty(RType))], Val);
                   Found -> 
                       merge_members(Found, Val)
               end,
     replace_object(Array, Found, Replace);
 
-set_([{select,{_,_}}=S], {[_|_]=Array}, Val, Acc, P, RType) when ?IS_OBJ(Val) ->
-    set_([S], Array, Val, Acc, P, RType);
 
 set_([{select,{_,_}}], _Array, Val, _Acc, _P, _RType) -> 
     throw({replacing_object_with_value, Val});
@@ -391,23 +397,16 @@ set_([{select,{_,_}}], _Array, Val, _Acc, _P, _RType) ->
 set_([{select,{K,V}}=S|Ks], Array, Val, _Acc, P, RType) ->
     Found = subset_from_selector(S, Array),
     Objects = case Found of
-                  [] when P andalso (RType == map) ->
-                       [maps:put(K,V, #{})];
-                  [] when P ->
-                      [ eep_or_pl(RType, [{K,V}]) ];
+                  [] when P -> 
+                      [add_member(K, V, empty(RType))];
                   [] -> 
                     throw({no_path, S});
                   _ ->
                       Found
               end,
     Replaced = set_(Ks, Objects, Val, [], P, RType),
-    case Found of 
-        [] ->
-            lists:append(Array, Replaced);
-        _ ->
-            replace_object(Array, Found, Replaced)
+    replace_object(Array, Found, Replaced);
 
-    end;
 
 
 % Path component is index, make Val the index-ed element of the Array.
@@ -434,10 +433,8 @@ set_([S|_], NotArray, _Val, _Acc, _P, _RType) when ?IS_SELECTOR(S) ->
 % selected Objects pulled from the Array.
 set_([Name], [_|_]=Array, Val, _Acc, _P, RType) ->
     case found_elements(Name, Array) of
-        undefined when RType == map -> 
-             merge_members(Array, maps:put(Name, Val, #{}));
         undefined ->
-            merge_members(Array, eep_or_pl(RType, [{Name, Val}]));
+           merge_members(Array, add_member(Name, Val, empty(RType)));
         Found -> 
             case ?IS_OBJ(Val) of 
                 true ->
@@ -454,12 +451,10 @@ set_([Name], [_|_]=Array, Val, _Acc, _P, RType) ->
 set_([Name|Keys], [_|_]=Array, Val, _Acc, P, RType) ->
     Found = found_elements(Name, Array),
     Objects = case Found of
-                  undefined when P  andalso (RType == map) ->
-                      maps:put(Name, set_(Keys, #{}, Val, [], P, RType), #{});
                   undefined when P ->
-                      eep_or_pl(RType, 
-                                [{Name, 
-                                  set_(Keys,empty(RType), Val, [], P, RType)}]);
+                      add_member(Name, 
+                                 set_(Keys, empty(RType), Val, [], P, RType), 
+                                 empty(RType));
                   undefined ->
                       throw({no_path, Name});
                   _ -> 
@@ -469,7 +464,7 @@ set_([Name|Keys], [_|_]=Array, Val, _Acc, P, RType) ->
         undefined ->
             merge_members(Array, Objects);
         _ ->
-            merge_members(Array, eep_or_pl(RType, [{Name, Objects}]))
+            merge_members(Array, [{Name, Objects}])
     end.
 
 
@@ -511,7 +506,8 @@ replace_object(Array, [Old], New) ->
 
 found_elements(Name, Array) ->
     case values_from_member(Name, Array) of
-        undefined -> undefined;
+        undefined -> 
+            undefined;
         EList -> 
             case lists:filter(fun(R) -> R /= undefined end, EList) of
                 [] -> undefined;
@@ -522,6 +518,8 @@ found_elements(Name, Array) ->
              
 
 % Return list of Results from trying to get Name from each Obj an Array.
+-spec values_from_member(name(), [obj(),...]) -> [obj(),...] | undefined.
+
 values_from_member(Name, Array) ->
     Elements = [walk([Name], Obj) || Obj <- Array, ?IS_OBJ(Obj)],
 
@@ -541,21 +539,79 @@ dont_nest(H) ->
             A
     end.
 
-% Select out a subset of Objects that contain Member {K:V}
+
+% Select out subset of Object/s that contain Member {K:V}
+-spec subset_from_selector(select(), [obj()]) -> [obj()].
+
 subset_from_selector({select, {K,V}}, Array) -> 
     F = fun(Obj) when ?IS_OBJ(Obj) -> 
                 get_member(K, Obj) == V;
            (_) -> false
         end,
-    lists:filter(F, Array);
-subset_from_selector(first, L) ->
+    lists:filter(F, Array).
+
+
+
+% Select out nth Object from Array.
+-spec nth(p_index(), [obj()]) -> obj().
+
+nth(first, L) ->
     hd(L);
-subset_from_selector(last, L) ->
+nth(last, L) ->
     lists:last(L);
-subset_from_selector(N, L)  when N =< length(L) ->
+nth(N, L)  when N =< length(L) ->
     lists:nth(N, L);
-subset_from_selector(N, L)  when N > length(L) ->
+nth(N, L)  when N > length(L) ->
     throw({error, index_out_of_bounds, N, L}).
+
+
+-spec remove([obj()], [obj()]) -> [obj()].
+remove(Objects, []) -> Objects;
+remove(Objects, Remove) -> 
+    lists:reverse(ordsets:to_list(
+                    ordsets:subtract(ordsets:from_list(Objects),
+                                     ordsets:from_list(Remove)))).
+
+
+%% Representation-specifc object manipulation: adding, deleteing members, etc.
+
+-spec get_member(name(), obj()) -> term() | 'undefined'.
+get_member(Name, #{}=Obj) ->
+    map_get(Name, Obj, undefined);
+
+get_member(Name, {PrpLst}) ->
+    proplists:get_value(Name, PrpLst, undefined);
+
+get_member(Name, Obj) ->
+    proplists:get_value(Name, Obj, undefined).
+
+
+-spec delete_member(name(), obj()) -> obj().
+delete_member(Name, #{}=Obj) ->
+    maps:remove(Name, Obj);
+
+delete_member(Name, {PrpLst}) ->
+    proplists:delete(Name, PrpLst);
+
+delete_member(Name, Obj) ->
+    proplists:delete(Name, Obj).
+
+
+-spec add_member(name(), value(), obj()) -> obj().
+add_member(Name, Val, #{}=Obj) ->
+    maps:put(Name, Val, Obj);
+
+add_member(Name, Val, [{}]) ->
+    [{Name, Val}];
+
+add_member(Name, Val, {[]}) ->
+    {[{Name, Val}]};
+
+add_member(Name, Val, [{_,_}|_]=Obj) ->
+    lists:keystore(Name, 1, Obj, {Name, Val});
+
+add_member(Name, Val, {[{_,_}|_]=PrpLst}) ->
+    {lists:keystore(Name, 1, PrpLst, {Name, Val})}.
 
 
 merge_members([#{}|_] = Maps, Target) ->
@@ -578,46 +634,6 @@ merge_pl(P1, []) ->
     P1.
 
 
-remove([], _Remove) -> [];
-remove(Objects, []) -> Objects;
-remove(Objects, Remove) -> 
-    lists:reverse(ordsets:to_list(
-                    ordsets:subtract(ordsets:from_list(Objects),
-                                     ordsets:from_list(Remove)))).
-
-
-
-
-get_member(Name, #{}=Obj) ->
-    map_get(Name, Obj, undefined);
-get_member(Name, {PrpLst}) ->
-    proplists:get_value(Name, PrpLst, undefined);
-get_member(Name, Obj) ->
-    proplists:get_value(Name, Obj, undefined).
-
-    
-delete_member(Name, #{}=Obj) ->
-    maps:remove(Name, Obj);
-delete_member(Name, {PrpLst}) ->
-    proplists:delete(Name, PrpLst);
-delete_member(Name, Obj) ->
-    proplists:delete(Name, Obj).
-
-
-add_member(Name, Val, #{}=Obj) ->
-    maps:put(Name, Val, Obj);
-
-add_member(Name, Val, [{}]) ->
-    [{Name, Val}];
-
-add_member(Name, Val, {[]}) ->
-    {[{Name, Val}]};
-
-add_member(Name, Val, [{_,_}|_]=Obj) ->
-    lists:keystore(Name, 1, Obj, {Name, Val});
-
-add_member(Name, Val, {[{_,_}|_]=PrpLst}) ->
-    {lists:keystore(Name, 1, PrpLst, {Name, Val})}.
 
 
 index_to_n(_Array, first) -> 1;
@@ -646,17 +662,17 @@ rep_type(#{}) -> map;
 rep_type([{}]) -> proplist;
 rep_type({[]}) -> eep;
 rep_type([#{}|_]) -> map;
-rep_type([[{}]|_TL]) -> proplist;
-rep_type([{[]}|_TL]) -> eep;
 rep_type([{_,_}|_]) -> proplist;
 rep_type({[{_,_}|_]}) -> eep;
-rep_type([[{_,_}|_]|_]) -> proplist;
-rep_type({[{[{_,_}|_]}|_]}) -> eep;
+rep_type({[H|_]})  -> rep_type(H);
 rep_type([H|_TL]) when is_list(H) -> rep_type(H);
 rep_type(_) -> error.
 
 
-% to support erlang 17 need to roll my own get/3
+
+% In support erlang 17 need to roll my own get/3
+-spec map_get(name(), #{}, term()) -> term().
+
 map_get(Key, Map, Default) ->
      try  maps:get(Key, Map) of
           Value ->
@@ -675,7 +691,10 @@ eep_or_pl(eep, Item) ->
 empty(proplist) ->
     [{}];
 empty(eep) ->
-    {[]}.
+    {[]};
+empty(map) ->
+    #{}.
+
 
 normalize_members([{N,V}|Ms]) ->
     {N, V, Ms};
