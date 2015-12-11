@@ -13,7 +13,7 @@ ej, anything bad is completely my fault.
 
 ###Dependencies
 Other then the below, there are no dependencies. The source code is a single 
-file which includes eunit test cases.
+file.
 
 * Erlang 17.0 +
 * Builds with rebar3 and uses the Hex package manager
