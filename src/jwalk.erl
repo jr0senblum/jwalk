@@ -437,16 +437,19 @@ set_([{select,{K,V}}=S|Ks], Array, Val, _Acc, P, RType) ->
 
 % Path component is index, make Val the index-ed element of the Array.
 set_([S|Path], [_|_]=Array, Val, _Acc, P, RType) when ?IS_SELECTOR(S) ->
-    N = index_to_n(Array, S),
+    N = index_to_n(Array, S), 
     case Path of
-        [] ->
-            lists:sublist(Array, 1, min(1, N-1)) ++
-                [Val] ++  
-                lists:sublist(Array, N + 1, length(Array));
-        _More when P ; N =<length(Array) ->
-            lists:sublist(Array, 1, min(1, N-1)) ++
-                [set_(Path, lists:nth(N, Array), Val, [], P, RType)] ++
-                lists:sublist(Array, N + 1, length(Array));
+        [] when N > 0 ->
+            lists:append([lists:sublist(Array, 1, min(1, N-1)),
+                         [Val], 
+                          lists:sublist(Array, N + 1, length(Array))]
+                         );
+        _More when N > 0 andalso (P orelse N =<length(Array)) ->
+            lists:append(
+              [lists:sublist(Array, 1, max(0, N-1)),
+               [set_(Path, lists:nth(N, Array), Val, [], P, RType)],
+               lists:sublist(Array, N + 1, length(Array))]
+             );
         _More ->
             throw({no_path, S})
     end;
