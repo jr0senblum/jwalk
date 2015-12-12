@@ -635,10 +635,16 @@ get_member(Name, #{}=Obj) ->
     map_get(Name, Obj, undefined);
 
 get_member(Name, {PrpLst}) ->
-    proplists:get_value(Name, PrpLst, undefined);
+    case lists:keyfind(Name, 1, PrpLst) of
+        {Name, Value} -> Value;
+        false -> undefined
+    end;
 
 get_member(Name, Obj) ->
-    proplists:get_value(Name, Obj, undefined).
+    case lists:keyfind(Name, 1, Obj) of
+        {Name, Value} -> Value;
+        false -> undefined
+    end.
 
 
 -spec delete_member(name(), obj()) -> obj().
@@ -689,8 +695,6 @@ merge_pl(P1, {[]}) ->
     P1;
 merge_pl(P1, []) ->
     P1.
-
-
 
 
 index_to_n(_Array, first) -> 1;
