@@ -8,7 +8,7 @@ This work is inspired by [ej](https://github.com/seth/ej), but this implementati
 handles map, eep-18 and proplist representations of JSON - the types returned by
 [jsone](https://github.com/sile/jsone) or [jiffy](https://github.com/davisp/jiffy),
 for example. It does not handle mochijson-style, tuple-in-struct encodings. 
-Anything about this is probably due to the contributors and maintainers of 
+Anything good about this is probably due to the contributors and maintainers of 
 ej, anything bad or awkward is completely my fault.
 
 ###Dependencies
