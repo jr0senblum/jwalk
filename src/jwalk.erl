@@ -104,8 +104,7 @@
 
 % Types
 -type name()     :: binary() | string().
--type value()    :: binary() | string() | number() | 
-                    delete | true | false | null| integer().
+-type value()    :: name() | number() | delete | true | false | null.
 
 -type select()   :: {select, {name(), value()}}.
 -type p_index()  :: 'first' | 'last' | non_neg_integer().
@@ -145,7 +144,7 @@
 %% {replacing_object_with_value, _} <br/>
 %% {index_out_of_bounds, _, _}.
 %%
--spec delete(path(), obj()) -> jwalk_return().
+-spec delete(Path::path(), Obj::obj()) -> Struct::jwalk_return().
 
 delete(Path, Obj) ->
     case rep_type(Obj) of
@@ -166,7 +165,7 @@ delete(Path, Obj) ->
 %% {selector_used_on_object, _} <br/>
 %% {index_for_non_array, _} <br/>
 %%
--spec get(path(), obj()) -> jwalk_return().
+-spec get(Path::path(), Obj::obj()) -> Struct::jwalk_return().
 
 get(Path, Obj) ->
     try 
@@ -185,7 +184,7 @@ get(Path, Obj) ->
 %%
 %% See {@link get/2. get/2}.
 %%
--spec get(path(), obj(), Default::any()) -> jwalk_return().
+-spec get(Path::path(), Obj::obj(), Default::any()) -> Struct::jwalk_return().
 
 get(Path, Obj, Default) ->
     case get(Path, Obj) of
@@ -216,7 +215,7 @@ get(Path, Obj, Default) ->
 %% {replacing_object_with_value, _} <br/>
 %% {index_out_of_bounds, _, _}.
 %%
--spec set(path(), obj(), value()) -> jwalk_return().
+-spec set(Path::path(), Obj::obj(), Value::value()) -> Struct::jwalk_return().
 
 set(Path, Obj, Value) ->
     case rep_type(Obj) of
@@ -231,7 +230,7 @@ set(Path, Obj, Value) ->
 %% @doc Same as {@link set/3. set/3} but creates intermediary elements as 
 %% necessary. 
 %%
--spec set_p(path(), obj(), value()) -> jwalk_return().
+-spec set_p(Path::path(), Obj::obj(), Value::value()) -> Struct::jwalk_return().
 
 set_p(Path, Obj, Value) ->
     case rep_type(Obj) of
@@ -242,8 +241,16 @@ set_p(Path, Obj, Value) ->
     end.
 
 
--spec do_set(path(), obj(), value(), [tuple()], boolean(), obj_type()) -> 
-                                                                 jwalk_return().
+% wrap the various flavours of set, set_p and delete into one function.
+-spec do_set(Path, Obj, Value, Acc, IsP, RType) -> Struct when
+      Path   :: path(),
+      Obj    :: obj(),
+      Value  :: value(),
+      Acc    :: [{_,_}],
+      IsP    :: boolean(),
+      RType  :: obj_type(),
+      Struct:: jwalk_return().
+
 do_set(Path, Obj, Value, Acc, P, RepType) ->
     try 
         set_(Path, Obj, Value, Acc, P, RepType)
@@ -259,7 +266,7 @@ do_set(Path, Obj, Value, Acc, P, RepType) ->
 %% -----------------------------------------------------------------------------
 
 
--spec walk(path(), obj()|[]) -> jwalk_return().
+-spec walk(Path::path(), Obj::obj()) -> Struct::jwalk_return().
 
 % Some base cases.
 walk([{select, {_,_}}|_], []) ->  [];
@@ -313,8 +320,13 @@ continue(Value, Path)                          -> walk(Path, Value).
 
 
 
--spec set_(path(), obj()|[], term(), [tuple()], boolean(), obj_type()) -> 
-                                                                 jwalk_return().
+-spec set_(Path, Obj, Val, Acc, IsP, RType) -> jwalk_return() when
+      Path  :: path(),
+      Obj   :: obj()|[],
+      Val   :: value() | obj(),
+      Acc   :: [{_,_}],
+      IsP   :: boolean(),
+      RType :: obj_type().
 
 % Final Path element: DELETE.
 set_([Name], Obj, delete, _Acc, _IsP, _RType) when ?IS_OBJ(Obj) andalso
@@ -521,9 +533,13 @@ replace_member(Name, Array, Val) ->
     lists:reverse(lists:foldl(F, [], Array)).
 
 
+
 % Replace Old with New in Array.
--spec replace_object([obj()|value()], [obj(),...], [obj(),...] | obj()) -> 
-                                                                [obj()|value()].
+-spec replace_object(Array, Old, New) -> NewArray when
+      Array    :: [obj()|value()],
+      Old      :: [obj()],
+      New      :: [obj()],
+      NewArray :: [obj()|value()].
 
 replace_object(Same, Same, New) -> New;
 
@@ -533,13 +549,9 @@ replace_object(Array, [Old], [New]) ->
      F = fun(Obj) when Obj == Old -> New;
              (Other) -> Other
           end,
-      lists:map(F, Array);
-
-replace_object(Array, [Old], New) ->
-     F = fun(Obj) when Obj == Old -> New;
-             (Other) -> Other
-          end,
       lists:map(F, Array).
+
+
 
 
 % Return Values from {Name, Values} from any Objects in the Array or undefined 
