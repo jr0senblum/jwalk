@@ -81,7 +81,7 @@
 
 -define(IS_J_TERM(X), 
         (?IS_OBJ(X) orelse 
-        is_number(X) orelse 
+        is_float(X) orelse is_integer(X) orelse
         (X == true) orelse
         (X == false) orelse 
         is_binary(X) orelse
@@ -103,24 +103,26 @@
 
 
 % Types
--type name()     :: binary() | string().
--type value()    :: name() | number() | delete | true | false | null.
+-type name()     :: binary().
+-type value()    :: binary() | integer() | float() | true | false | null.
 
 -type select()   :: {select, {name(), value()}}.
 -type p_index()  :: 'first' | 'last' | non_neg_integer().
 -type p_elt()    :: name() | select() | p_index() | 'new'.
 -type path()     :: {p_elt()} | [p_elt(),...].
 
--type pl()     :: [{}] | [{name(), value()  | pl() | [pl()]},...].
--type eep()    :: {[]} | {[{name(), value() | eep() | [eep(),...]}]}.
--type obj()    :: map() | pl() | eep() | [pl(),...] | [eep(),...] | [map(),...].
+-type pl_value() :: value() | pl() | [pl_value(),...].
+-type pl()       :: [{name(), pl_value()},...].
+
+-type eep_value() :: value() | eep() | [eep_value(),...].
+-type eep()    :: {[{name(), eep_value()},...]}.
+-type jobj()    :: [{}] | {[]} |  map() | pl() | eep(). 
+
+-type jwalk_return() :: undefined | jobj() | value() | [] | [jwalk_return(),...].
 
 -type obj_type() :: map | proplist | eep.
 
--type jwalk_return() :: undefined | obj() | value() | 
-                       [undefined | obj() | value(),...].
-
--export_type ([jwalk_return/0]).
+-export_type ([jwalk_return/0, jobj/0]).
 
 
 
@@ -144,7 +146,7 @@
 %% {replacing_object_with_value, _} <br/>
 %% {index_out_of_bounds, _, _}.
 %%
--spec delete(Path::path(), Obj::obj()) -> Struct::jwalk_return().
+-spec delete(Path::path(), Obj::jobj()) -> NewObj::jobj().
 
 delete(Path, Obj) ->
     case rep_type(Obj) of
@@ -165,7 +167,7 @@ delete(Path, Obj) ->
 %% {selector_used_on_object, _} <br/>
 %% {index_for_non_array, _} <br/>
 %%
--spec get(Path::path(), Obj::obj()) -> Struct::jwalk_return().
+-spec get(Path::path(), Obj::jobj()) -> Struct::jwalk_return().
 
 get(Path, Obj) ->
     try 
@@ -184,7 +186,7 @@ get(Path, Obj) ->
 %%
 %% See {@link get/2. get/2}.
 %%
--spec get(Path::path(), Obj::obj(), Default::any()) -> Struct::jwalk_return().
+-spec get(Path::path(), Obj::jobj(), Default::any()) -> Struct::jwalk_return().
 
 get(Path, Obj, Default) ->
     case get(Path, Obj) of
@@ -215,7 +217,7 @@ get(Path, Obj, Default) ->
 %% {replacing_object_with_value, _} <br/>
 %% {index_out_of_bounds, _, _}.
 %%
--spec set(Path::path(), Obj::obj(), Value::value()) -> Struct::jwalk_return().
+-spec set(Path::path(), Obj::jobj(), Value::value()) -> NewObj::jobj().
 
 set(Path, Obj, Value) ->
     case rep_type(Obj) of
@@ -230,7 +232,7 @@ set(Path, Obj, Value) ->
 %% @doc Same as {@link set/3. set/3} but creates intermediary elements as 
 %% necessary. 
 %%
--spec set_p(Path::path(), Obj::obj(), Value::value()) -> Struct::jwalk_return().
+-spec set_p(Path::path(), Obj::jobj(), Value::value()) -> NewObj::jobj().
 
 set_p(Path, Obj, Value) ->
     case rep_type(Obj) of
@@ -242,14 +244,14 @@ set_p(Path, Obj, Value) ->
 
 
 % wrap the various flavours of set, set_p and delete into one function.
--spec do_set(Path, Obj, Value, Acc, IsP, RType) -> Struct when
+-spec do_set(Path, Obj, Value, Acc, IsP, RType) -> NewObj when
       Path   :: path(),
-      Obj    :: obj(),
-      Value  :: value(),
+      Obj    :: jobj(),
+      Value  :: value() | delete,
       Acc    :: [{_,_}],
       IsP    :: boolean(),
       RType  :: obj_type(),
-      Struct:: jwalk_return().
+      NewObj :: jobj().
 
 do_set(Path, Obj, Value, Acc, P, RepType) ->
     try 
@@ -266,7 +268,7 @@ do_set(Path, Obj, Value, Acc, P, RepType) ->
 %% -----------------------------------------------------------------------------
 
 
--spec walk(Path::path(), Obj::obj()) -> Struct::jwalk_return().
+-spec walk(Path::path(), Obj::jobj()) -> Struct::jwalk_return().
 
 % Some base cases.
 walk([{select, {_,_}}|_], []) ->  [];
@@ -320,13 +322,14 @@ continue(Value, Path)                          -> walk(Path, Value).
 
 
 
--spec set_(Path, Obj, Val, Acc, IsP, RType) -> jwalk_return() when
-      Path  :: path(),
-      Obj   :: obj()|[],
-      Val   :: value() | obj(),
-      Acc   :: [{_,_}],
-      IsP   :: boolean(),
-      RType :: obj_type().
+-spec set_(Path, Obj, Val, Acc, IsP, RType) -> NewObj when 
+      Path   :: path(),
+      Obj    :: jobj()|[],
+      Val    :: value() | jobj() | delete,
+      Acc    :: [{_,_}],
+      IsP    :: boolean(),
+      RType  :: obj_type(),
+      NewObj :: jobj().
 
 % Final Path element: DELETE.
 set_([Name], Obj, delete, _Acc, _IsP, _RType) when ?IS_OBJ(Obj) andalso
@@ -517,7 +520,7 @@ set_([Name|Keys], [_|_]=Array, Val, _Acc, P, RType) ->
 
 % Replace {Name, V} with {Name, Value} for every Object in the List, add if not
 % there.
--spec replace_member(name(), [name()|obj()], value()) -> [name()|obj()].
+-spec replace_member(name(), [name() | jobj()], value()) -> [name() | jobj()].
                                               
 replace_member(Name, Array, Val) ->
     F = fun(Obj, Acc) when ?IS_OBJ(Obj) ->                
@@ -536,10 +539,10 @@ replace_member(Name, Array, Val) ->
 
 % Replace Old with New in Array.
 -spec replace_object(Array, Old, New) -> NewArray when
-      Array    :: [obj()|value()],
-      Old      :: [obj()],
-      New      :: [obj()],
-      NewArray :: [obj()|value()].
+      Array    :: [jobj() | value()],
+      Old      :: [jobj()],
+      New      :: [jobj()],
+      NewArray :: [jobj() | value()].
 
 replace_object(Same, Same, New) -> New;
 
@@ -556,7 +559,8 @@ replace_object(Array, [Old], [New]) ->
 
 % Return Values from {Name, Values} from any Objects in the Array or undefined 
 % if none.
--spec found_elements(name(), [obj()|value()]) -> jwalk_return() | undefined.
+-spec found_elements(name(), [jobj() | value()]) -> [jobj(),...] | undefined.
+
 found_elements(Name, Array) ->
     case values_from_member(Name, Array) of
         undefined -> 
@@ -571,7 +575,10 @@ found_elements(Name, Array) ->
              
 
 % Return list of Results from trying to get(Name, Obj) from each Obj an Array.
--spec values_from_member(name(), [obj(),...]) -> [obj(),...] | undefined.
+-spec values_from_member(Name, ElementList) -> Result when
+      Name :: name(),
+      ElementList :: [jobj(),...],
+      Result :: [jobj() | undefined] | undefined.
 
 values_from_member(Name, Array) ->
     Elements = [walk([Name], Obj) || Obj <- Array, ?IS_OBJ(Obj)],
@@ -594,7 +601,7 @@ dont_nest(H) ->
 
 
 % Select out subset of Object/s that contain Member {K:V}
--spec subset_from_selector(select(), [obj()|value()]) -> [obj()].
+-spec subset_from_selector(select(), [jobj()|value()]) -> [jobj()].
 
 subset_from_selector({select, {K,V}}, Array) -> 
     F = fun(Obj) when ?IS_OBJ(Obj) -> 
@@ -605,7 +612,7 @@ subset_from_selector({select, {K,V}}, Array) ->
 
 
 % Select out nth Object from Array.
--spec nth(p_index(), [obj()|value()]) -> obj().
+-spec nth(p_index(), [jobj()|value()]) -> jobj().
 
 nth(first, L) ->
     hd(L);
@@ -617,7 +624,8 @@ nth(N, L)  when N > length(L) ->
     throw({index_out_of_bounds, N, L}).
 
 
--spec remove([obj()], [obj()]) -> [obj()].
+-spec remove([jobj()|value()], [jobj()|value()]) -> [jobj()|value()].
+
 remove(Objects, []) -> Objects;
 remove(Objects, Remove) -> 
     lists:reverse(ordsets:to_list(
@@ -626,7 +634,7 @@ remove(Objects, Remove) ->
 
 
 %% Representation-specifc object manipulation: adding, deleteing members, etc.
-
+-spec eep_or_pl(proplist|eep, list(tuple())) -> eep() | pl().
 eep_or_pl(proplist, Item) ->  Item;
 eep_or_pl(eep, Item)      -> {Item}.
 
@@ -642,7 +650,7 @@ normalize_members({[{N,V}|Ms]}) ->
     {N, V, Ms}.
 
 
--spec get_member(name(), obj()) -> term() | 'undefined'.
+-spec get_member(name(), jobj()) -> term() | 'undefined'.
 get_member(Name, #{}=Obj) ->
     map_get(Name, Obj, undefined);
 
@@ -659,18 +667,18 @@ get_member(Name, Obj) ->
     end.
 
 
--spec delete_member(name(), obj()) -> obj().
+-spec delete_member(name(), jobj()) -> jobj().
 delete_member(Name, #{}=Obj) ->
     maps:remove(Name, Obj);
 
 delete_member(Name, {PrpLst}) ->
-    proplists:delete(Name, PrpLst);
+    {proplists:delete(Name, PrpLst)};
 
 delete_member(Name, Obj) ->
     proplists:delete(Name, Obj).
 
 
--spec add_member(name(), value(), obj()) -> obj().
+-spec add_member(name(), value(), jobj()) -> jobj().
 add_member(Name, Val, #{}=Obj) ->
     maps:put(Name, Val, Obj);
 
@@ -687,7 +695,8 @@ add_member(Name, Val, {[{_,_}|_]=PrpLst}) ->
     {lists:keystore(Name, 1, PrpLst, {Name, Val})}.
 
 
--spec merge_members(obj(), [tuple()]|{[tuple()]}) -> obj().
+-spec merge_members(Objects::[jobj()], Object::jobj()) -> NewObjects::[jobj()].
+
 merge_members([#{}|_] = Maps, Target) ->
     [maps:merge(M, Target) || M <- Maps];
 merge_members(Objects, M) ->
