@@ -64,7 +64,7 @@
          set_p/3]).
 
 
--define(IS_EEP(X),  (X == [{}] orelse 
+-define(IS_EEP(X),  (X == [{}] orelse
                      is_tuple(X) andalso 
                      is_list(element(1, X)) andalso 
                      (hd(element(1,X)) == {} orelse 
@@ -81,7 +81,8 @@
 
 -define(IS_J_TERM(X), 
         (?IS_OBJ(X) orelse 
-        is_float(X) orelse is_integer(X) orelse
+         is_float(X) orelse 
+         is_integer(X) orelse
         (X == true) orelse
         (X == false) orelse 
         is_binary(X) orelse
@@ -116,13 +117,13 @@
 
 -type eep_value() :: value() | eep() | [eep_value(),...].
 -type eep()    :: {[{name(), eep_value()},...]}.
--type jobj()    :: [{}] | {[]} |  map() | pl() | eep(). 
+-type j_obj()    :: [{}] | {[]} |  map() | pl() | eep(). 
 
--type jwalk_return() :: undefined | jobj() | value() | [] | [jwalk_return(),...].
+-type jwalk_return() :: undefined | j_obj() | value() | [] | [jwalk_return(),...].
 
 -type obj_type() :: map | proplist | eep.
 
--export_type ([jwalk_return/0, jobj/0]).
+-export_type ([jwalk_return/0, j_obj/0]).
 
 
 
@@ -146,14 +147,17 @@
 %% {replacing_object_with_value, _} <br/>
 %% {index_out_of_bounds, _, _}.
 %%
--spec delete(Path::path(), Obj::jobj()) -> NewObj::jobj().
+-spec delete(Path, Object) -> NewObject when
+      Path      :: path(),
+      Object    :: j_obj(),
+      NewObject :: j_obj().
 
-delete(Path, Obj) ->
-    case rep_type(Obj) of
+delete(Path, Object) ->
+    case rep_type(Object) of
         error ->
-            error({illegal_object, Obj});
+            error({illegal_object, Object});
         Type ->
-            do_set(to_binary_list(Path), Obj, delete, [], false, Type)
+            do_set(to_binary_list(Path), Object, delete, [], false, Type)
     end.
 
     
@@ -167,11 +171,14 @@ delete(Path, Obj) ->
 %% {selector_used_on_object, _} <br/>
 %% {index_for_non_array, _} <br/>
 %%
--spec get(Path::path(), Obj::jobj()) -> Struct::jwalk_return().
+-spec get(Path, Object) -> Result when
+      Path   :: path(),
+      Object :: j_obj(),
+      Result :: jwalk_return().
 
-get(Path, Obj) ->
+get(Path, Object) ->
     try 
-        walk(to_binary_list(Path), Obj)
+        walk(to_binary_list(Path), Object)
     catch
         throw:Error ->
             error(Error)
@@ -186,10 +193,14 @@ get(Path, Obj) ->
 %%
 %% See {@link get/2. get/2}.
 %%
--spec get(Path::path(), Obj::jobj(), Default::any()) -> Struct::jwalk_return().
+-spec get(Path, Object, Default) -> Result when
+      Path    :: path(),
+      Object  :: j_obj(),
+      Default :: any(),
+      Result  :: jwalk_return().
 
-get(Path, Obj, Default) ->
-    case get(Path, Obj) of
+get(Path, Object, Default) ->
+    case get(Path, Object) of
         undefined ->
             Default;
         Found ->
@@ -217,14 +228,18 @@ get(Path, Obj, Default) ->
 %% {replacing_object_with_value, _} <br/>
 %% {index_out_of_bounds, _, _}.
 %%
--spec set(Path::path(), Obj::jobj(), Value::value()) -> NewObj::jobj().
+-spec set(Path, Object, Value) -> NewObject when
+      Path      :: path(), 
+      Object    :: j_obj(), 
+      Value     :: value() | j_obj() | [value() | j_obj(),...],
+      NewObject :: j_obj().
 
-set(Path, Obj, Value) ->
-    case rep_type(Obj) of
+set(Path, Object, Value) ->
+    case rep_type(Object) of
         error ->
-            error({illegal_object, Obj});
+            error({illegal_object, Object});
         Type ->
-            do_set(to_binary_list(Path), Obj, Value, [], false, Type)
+            do_set(to_binary_list(Path), Object, Value, [], false, Type)
     end.
 
 
@@ -232,26 +247,30 @@ set(Path, Obj, Value) ->
 %% @doc Same as {@link set/3. set/3} but creates intermediary elements as 
 %% necessary. 
 %%
--spec set_p(Path::path(), Obj::jobj(), Value::value()) -> NewObj::jobj().
+-spec set_p(Path, Object, Value) -> NewObject when
+      Path      :: path(), 
+      Object    :: j_obj(), 
+      Value     :: value() | j_obj() | [value() | j_obj(),...],
+      NewObject :: j_obj().
 
-set_p(Path, Obj, Value) ->
-    case rep_type(Obj) of
+set_p(Path, Object, Value) ->
+    case rep_type(Object) of
         error ->
-            error({illegal_object, Obj});
+            error({illegal_object, Object});
         Type ->
-            do_set(to_binary_list(Path), Obj, Value, [], true, Type)
+            do_set(to_binary_list(Path), Object, Value, [], true, Type)
     end.
 
 
 % wrap the various flavours of set, set_p and delete into one function.
 -spec do_set(Path, Obj, Value, Acc, IsP, RType) -> NewObj when
       Path   :: path(),
-      Obj    :: jobj(),
-      Value  :: value() | delete,
+      Obj    :: j_obj(),
+      Value  :: delete | value() | j_obj() | [value() | j_obj(),...],
       Acc    :: [{_,_}],
       IsP    :: boolean(),
       RType  :: obj_type(),
-      NewObj :: jobj().
+      NewObj :: j_obj().
 
 do_set(Path, Obj, Value, Acc, P, RepType) ->
     try 
@@ -268,7 +287,10 @@ do_set(Path, Obj, Value, Acc, P, RepType) ->
 %% -----------------------------------------------------------------------------
 
 
--spec walk(Path::path(), Obj::jobj()) -> Struct::jwalk_return().
+-spec walk(Path, Obj) -> Result when 
+      Path   :: path(), 
+      Obj    :: j_obj(),
+      Result :: jwalk_return().
 
 % Some base cases.
 walk([{select, {_,_}}|_], []) ->  [];
@@ -324,12 +346,12 @@ continue(Value, Path)                          -> walk(Path, Value).
 
 -spec set_(Path, Obj, Val, Acc, IsP, RType) -> NewObj when 
       Path   :: path(),
-      Obj    :: jobj()|[],
-      Val    :: value() | jobj() | delete,
+      Obj    :: j_obj()|[],
+      Val    :: value() | j_obj() | delete,
       Acc    :: [{_,_}],
       IsP    :: boolean(),
       RType  :: obj_type(),
-      NewObj :: jobj().
+      NewObj :: j_obj().
 
 % Final Path element: DELETE.
 set_([Name], Obj, delete, _Acc, _IsP, _RType) when ?IS_OBJ(Obj) andalso
@@ -514,13 +536,26 @@ set_([Name|Keys], [_|_]=Array, Val, _Acc, P, RType) ->
 
 
 %% ----------------------------------------------------------------------------
-%% INTERNAL FUNCTIONS
+%% INTERNAL FUNCTIONS SUPPORTING walk and set_
 %% ----------------------------------------------------------------------------
+
+
+% In support erlang 17 need to roll my own get/3.
+-spec map_get(name(), #{}, term()) -> term().
+
+map_get(Key, Map, Default) ->
+     try  maps:get(Key, Map) of
+          Value ->
+             Value
+     catch
+         _:_ ->
+             Default
+     end.
 
 
 % Replace {Name, V} with {Name, Value} for every Object in the List, add if not
 % there.
--spec replace_member(name(), [name() | jobj()], value()) -> [name() | jobj()].
+-spec replace_member(name(), [name() | j_obj()], value()) -> [name() | j_obj()].
                                               
 replace_member(Name, Array, Val) ->
     F = fun(Obj, Acc) when ?IS_OBJ(Obj) ->                
@@ -539,10 +574,10 @@ replace_member(Name, Array, Val) ->
 
 % Replace Old with New in Array.
 -spec replace_object(Array, Old, New) -> NewArray when
-      Array    :: [jobj() | value()],
-      Old      :: [jobj()],
-      New      :: [jobj()],
-      NewArray :: [jobj() | value()].
+      Array    :: [j_obj() | value()],
+      Old      :: [j_obj()],
+      New      :: [j_obj()],
+      NewArray :: [j_obj() | value()].
 
 replace_object(Same, Same, New) -> New;
 
@@ -555,11 +590,9 @@ replace_object(Array, [Old], [New]) ->
       lists:map(F, Array).
 
 
-
-
 % Return Values from {Name, Values} from any Objects in the Array or undefined 
 % if none.
--spec found_elements(name(), [jobj() | value()]) -> [jobj(),...] | undefined.
+-spec found_elements(name(), [j_obj() | value()]) -> [j_obj(),...] | undefined.
 
 found_elements(Name, Array) ->
     case values_from_member(Name, Array) of
@@ -577,8 +610,8 @@ found_elements(Name, Array) ->
 % Return list of Results from trying to get(Name, Obj) from each Obj an Array.
 -spec values_from_member(Name, ElementList) -> Result when
       Name :: name(),
-      ElementList :: [jobj(),...],
-      Result :: [jobj() | undefined] | undefined.
+      ElementList :: [j_obj(),...],
+      Result :: [j_obj() | undefined] | undefined.
 
 values_from_member(Name, Array) ->
     Elements = [walk([Name], Obj) || Obj <- Array, ?IS_OBJ(Obj)],
@@ -601,7 +634,7 @@ dont_nest(H) ->
 
 
 % Select out subset of Object/s that contain Member {K:V}
--spec subset_from_selector(select(), [jobj()|value()]) -> [jobj()].
+-spec subset_from_selector(select(), [j_obj()|value()]) -> [j_obj()].
 
 subset_from_selector({select, {K,V}}, Array) -> 
     F = fun(Obj) when ?IS_OBJ(Obj) -> 
@@ -611,8 +644,18 @@ subset_from_selector({select, {K,V}}, Array) ->
     lists:filter(F, Array).
 
 
+% Faster than A -- B, hopefully.
+-spec remove([j_obj()|value()], [j_obj()|value()]) -> [j_obj()|value()].
+
+remove(Objects, []) -> Objects;
+remove(Objects, Remove) -> 
+    lists:reverse(ordsets:to_list(
+                    ordsets:subtract(ordsets:from_list(Objects),
+                                     ordsets:from_list(Remove)))).
+
+
 % Select out nth Object from Array.
--spec nth(p_index(), [jobj()|value()]) -> jobj().
+-spec nth(p_index(), [j_obj()|value()]) -> j_obj().
 
 nth(first, L) ->
     hd(L);
@@ -624,33 +667,39 @@ nth(N, L)  when N > length(L) ->
     throw({index_out_of_bounds, N, L}).
 
 
--spec remove([jobj()|value()], [jobj()|value()]) -> [jobj()|value()].
-
-remove(Objects, []) -> Objects;
-remove(Objects, Remove) -> 
-    lists:reverse(ordsets:to_list(
-                    ordsets:subtract(ordsets:from_list(Objects),
-                                     ordsets:from_list(Remove)))).
+% Translate a Path element index to an integer index.
+index_to_n(_Array, first) -> 1;
+index_to_n(Array, last) -> length(Array);
+index_to_n(_Array, Integer) -> Integer.
 
 
+
+%% -----------------------------------------------------------------------------
 %% Representation-specifc object manipulation: adding, deleteing members, etc.
--spec eep_or_pl(proplist|eep, list(tuple())) -> eep() | pl().
+%% -----------------------------------------------------------------------------
+
+% Convert a list to an object-specific representation.
+-spec eep_or_pl(proplist | eep, [tuple()]) -> eep() | pl().
+
 eep_or_pl(proplist, Item) ->  Item;
 eep_or_pl(eep, Item)      -> {Item}.
 
 
+% Return the correct empty object representation.
 empty(proplist) -> [{}];
 empty(eep)      -> {[]};
 empty(map)      -> #{}.
 
 
-normalize_members([{N,V}|Ms]) ->
-    {N, V, Ms};
-normalize_members({[{N,V}|Ms]}) ->
-    {N, V, Ms}.
+% A few functions need the first Member and the ballance of members, but this is
+% reprsentation-specific. 
+normalize_members([{N,V}|Ms]) ->   {N, V, Ms};
+normalize_members({[{N,V}|Ms]}) -> {N, V, Ms}.
 
 
--spec get_member(name(), jobj()) -> term() | 'undefined'.
+% Return the member with name, Name, from an object.
+-spec get_member(name(), j_obj()) -> term() | 'undefined'.
+
 get_member(Name, #{}=Obj) ->
     map_get(Name, Obj, undefined);
 
@@ -667,7 +716,9 @@ get_member(Name, Obj) ->
     end.
 
 
--spec delete_member(name(), jobj()) -> jobj().
+% Delete member, {Name:_} from an Object.
+-spec delete_member(name(), j_obj()) -> j_obj().
+
 delete_member(Name, #{}=Obj) ->
     maps:remove(Name, Obj);
 
@@ -678,7 +729,9 @@ delete_member(Name, Obj) ->
     proplists:delete(Name, Obj).
 
 
--spec add_member(name(), value(), jobj()) -> jobj().
+% Add a member, {Name: Value} into an object.
+-spec add_member(name(), value(), j_obj()) -> j_obj().
+
 add_member(Name, Val, #{}=Obj) ->
     maps:put(Name, Val, Obj);
 
@@ -695,7 +748,8 @@ add_member(Name, Val, {[{_,_}|_]=PrpLst}) ->
     {lists:keystore(Name, 1, PrpLst, {Name, Val})}.
 
 
--spec merge_members(Objects::[jobj()], Object::jobj()) -> NewObjects::[jobj()].
+% Modify each Obj from the list of objects, by merging the Members of Object into Obj.
+-spec merge_members(Objects::[j_obj()], Object::j_obj()) -> NewObjects::[j_obj()].
 
 merge_members([#{}|_] = Maps, Target) ->
     [maps:merge(M, Target) || M <- Maps];
@@ -703,33 +757,35 @@ merge_members(Objects, M) ->
     [merge_pl(O, M) || O <- Objects].
 
 
-merge_pl(P1, [{K,V}|Ts]) when ?IS_PL(P1) ->
-    merge_pl(lists:keystore(K, 1, P1, {K,V}), Ts);
-
 merge_pl({P1}, [{K,V}|Ts]) ->
     merge_pl({lists:keystore(K, 1, P1, {K,V})}, Ts);
 
 merge_pl({P1}, {[{K,V}|Ts]}) ->
     merge_pl({lists:keystore(K, 1, P1, {K,V})}, {Ts});
 
+merge_pl(P1, [{K,V}|Ts]) ->
+    merge_pl(lists:keystore(K, 1, P1, {K,V}), Ts);
+
 merge_pl(P1, {[]}) ->
     P1;
+
 merge_pl(P1, []) ->
     P1.
 
 
-index_to_n(_Array, first) -> 1;
-index_to_n(Array, last) -> length(Array);
-index_to_n(_Array, Integer) -> Integer.
+
+%% -----------------------------------------------------------------------------
+%% Utility functions
+%% -----------------------------------------------------------------------------
 
 
+% Convert path elements to a list of elements where Names are binary.
 to_binary_list(Keys) ->
     L = case is_tuple(Keys) of
             true -> tuple_to_list(Keys);
             false -> Keys
         end,
     lists:map(fun(K) -> make_binary(K) end, L).
-
 
 
 make_binary(K) when is_binary(K); is_number(K) -> K;
@@ -739,27 +795,14 @@ make_binary({select, {K, V}}) ->
     {select, {make_binary(K), make_binary(V)}}.
 
 
-% looks for the first object and returns its representation type.
+% Look for the first object and returns its representation type.
 rep_type(#{}) -> map;
 rep_type([{}]) -> proplist;
 rep_type({[]}) -> eep;
 rep_type([#{}|_]) -> map;
 rep_type([{_,_}|_]) -> proplist;
-rep_type({[{_,_}|_]}) -> eep;
-rep_type({[H|_]})  -> rep_type(H);
+rep_type({[_|_]})  -> eep;
 rep_type([H|_TL]) when is_list(H) -> rep_type(H);
 rep_type(_) -> error.
 
 
-
-% In support erlang 17 need to roll my own get/3
--spec map_get(name(), #{}, term()) -> term().
-
-map_get(Key, Map, Default) ->
-     try  maps:get(Key, Map) of
-          Value ->
-             Value
-     catch
-         _:_ ->
-             Default
-     end.
