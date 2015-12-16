@@ -3,8 +3,8 @@
 %%% @copyright (C) 2015, Jim Rosenblum
 %%% @doc
 %%% The jwalk module is intended to make it easier to work with Erlang encodings
-%%% of JSON - Maps, Proplists, eep18 and mochijson tuple-in-struct  
-%%% representations are handled.
+%%% of JSON - maps, proplists, eep 18 and mochijson-style  representations are 
+%%% handled.
 %%%
 %%% This work is inspired by [https://github.com/seth/ej], but handles 
 %%% maps in addition to the other representation types.
@@ -82,18 +82,10 @@
                    tuple_size(hd(X)) == 2)).
 
 -define(IS_OBJ(X), (is_map(X) orelse ?IS_PL(X) orelse ?IS_EEP(X) orelse ?IS_MOCHI(X))).
+
 -define(EMPTY_STRUCT(X), (X == [{}] orelse X == {[]}) orelse X == {struct,[]}).
 -define(EMPTY_OBJ(X), (?EMPTY_STRUCT(X) orelse X == #{})).
 -define(NOT_MAP_OBJ(X), (not is_map(X)) andalso ?IS_OBJ(X)).
-
--define(IS_J_TERM(X), 
-        (?IS_OBJ(X) orelse 
-         is_float(X) orelse 
-         is_integer(X) orelse
-        (X == true) orelse
-        (X == false) orelse 
-        is_binary(X) orelse
-        (X == null))).
 
 -define(IS_SELECTOR(K), 
         ((K == first) orelse
@@ -128,7 +120,7 @@
 -type mochi_value() :: value() | mochi() | [mochi_value(),...].
 -type mochi()       :: {struct,[{name(), mochi_value()},...]}.
 
--type j_obj()    :: [{}] | {[]} |  {struct, []} | map() | pl() | eep() | mochi(). 
+-type j_obj()   :: [{}] | {[]} |  {struct, []} | map() | pl() | eep() | mochi(). 
 
 -type jwalk_return() :: undefined|j_obj()|value()|[]|[jwalk_return(),...].
 
@@ -349,14 +341,14 @@ walk([S|_], Element) when ?IS_SELECTOR(S) ->
     end.
 
 
-continue(false, _Path)                         -> undefined;
-continue(undefined, _Path)                     -> undefined;
+continue(false, _Path)                           -> undefined;
+continue(undefined, _Path)                       -> undefined;
 continue({struct,_}=Value, Path) when Path == [] -> Value;
-continue({_Name, Value}, Path) when Path == [] -> Value;
-continue(Value, Path) when Path == []          ->  Value;
-continue({struct,_}=Value, Path) -> walk(Path, Value);
-continue({_Name, Value}, Path)                 -> walk(Path, Value);
-continue(Value, Path)                          -> walk(Path, Value).
+continue({_Name, Value}, Path) when Path == []   -> Value;
+continue(Value, Path) when Path == []            ->  Value;
+continue({struct,_}=Value, Path)                 -> walk(Path, Value);
+continue({_Name, Value}, Path)                   -> walk(Path, Value);
+continue(Value, Path)                            -> walk(Path, Value).
 
 
 
@@ -432,7 +424,7 @@ set_([Name|Ps], Map, Val, _Acc, P, map) when is_map(Map), ?NOT_SELECTOR(Name) ->
     end;
 
 % When final Path elemenet is NEW applied to empty object, return Value in Array
-set_([new], Obj, Val, _Acc, _P, _RType) when ?IS_J_TERM(Val), ?EMPTY_OBJ(Obj) ->
+set_([new], Obj, Val, _Acc, _P, _RType) when ?EMPTY_OBJ(Obj) ->
     [Val];
     
 % Select_by_member applied to an empty Object. 
@@ -635,9 +627,9 @@ found_elements(Name, Array) ->
       ElementList :: [j_obj(),...],
       Result :: [j_obj() | undefined] | undefined.
 
-values_from_member(Name, Array) ->
+values_from_member(Name, ElementList) ->
 
-    Elements = [walk([Name], Obj) || Obj <- Array, ?IS_OBJ(Obj)],
+    Elements = [walk([Name], Obj) || Obj <- ElementList, ?IS_OBJ(Obj)],
     case Elements of
         [] -> undefined;
         _ -> dont_nest(Elements)
@@ -646,16 +638,15 @@ values_from_member(Name, Array) ->
 
 % Make sure that we always return an Array - proplists can be over flattened.
 dont_nest(H) -> 
-    A = lists:flatten(H),
-
-    case A of
-        [{struct,_}|_] = Obj  ->    
-            Obj;
-        [{_,_}|_] = Obj -> 
-            [Obj];
-        _ ->
-            A
-    end.
+     A = lists:flatten(H),
+     case A of
+         [{struct,_}|_] = Obj  ->    
+             Obj;
+         [{_,_}|_] = Obj -> 
+             [Obj];
+         _ ->
+             A
+     end.
 
 
 % Select out subset of Object/s that contain Member {K:V}
@@ -703,8 +694,11 @@ index_to_n(_Array, Integer) -> Integer.
 %% Representation-specifc object manipulation: adding, deleteing members, etc.
 %% -----------------------------------------------------------------------------
 
-% Convert a list to an object-specific representation.
--spec eep_pl_or_mochi(proplist|eep|mochi, [tuple()]) ->  eep() | pl() | mochi().
+% Convert a list to a representation-specific structure.
+-spec eep_pl_or_mochi(Rep, Item) -> Result when
+      Rep :: proplist | eep |mochi, 
+      Item :: [tuple()],
+      Result ::  eep() | pl() | mochi().
 
 eep_pl_or_mochi(proplist, Item) ->  Item;
 eep_pl_or_mochi(eep, Item)      -> {Item};
@@ -718,15 +712,14 @@ empty(map)      -> #{};
 empty(mochi)    -> {struct,[]}.
 
 
-% A few functions need the first Member and the ballance of members, but this is
-% reprsentation-specific. 
+% A few functions need the first Member and the ballance of Members, but this is
+% reprsened in a representation-specific way.
 normalize_members([{N,V}|Ms]) ->   {N, V, Ms};
 normalize_members({[{N,V}|Ms]}) -> {N, V, Ms};
 normalize_members({struct, [{N,V}|Ms]}) -> {N, V, Ms}.
 
 
-
-% Return the member with name, Name, from an object.
+% Return the Member with name, Name, from an object.
 -spec get_member(name(), j_obj()) -> term() | 'undefined'.
 
 get_member(Name, #{}=Obj) ->
@@ -751,7 +744,7 @@ get_member(Name, Obj) ->
     end.
 
 
-% Delete member, {Name:_} from an Object.
+% Delete Member, {Name:_} from an Object.
 -spec delete_member(name(), j_obj()) -> j_obj().
 
 delete_member(Name, #{}=Obj) ->
@@ -767,7 +760,7 @@ delete_member(Name, Obj) ->
     proplists:delete(Name, Obj).
 
 
-% Add a member, {Name: Value} into an object.
+% Add a Member, {Name: Value} into an object.
 -spec add_member(name(), value(), j_obj()) -> j_obj().
 
 add_member(Name, Val, #{}=Obj) ->
@@ -793,11 +786,16 @@ add_member(Name, Val, {struct, [{_,_}|_]=PrpLst}) ->
 
 
 
-% Modify each Obj from the list of objects, by merging the Members of Object into Obj.
--spec merge_members(Objects::[j_obj()], Object::j_obj()) -> NewObjects::[j_obj()].
+% Modify each Obj from the list of Objects, by merging the Members of Object 
+% into each Obj.
+-spec merge_members(Objects, Object) -> NewObjects when
+      Objects     :: [j_obj()], 
+      Object      :: j_obj(),
+       NewObjects :: [j_obj()].
 
 merge_members([#{}|_] = Maps, Target) ->
     [maps:merge(M, Target) || M <- Maps];
+
 merge_members(Objects, M) ->
     [merge_pl(O, M) || O <- Objects].
 

@@ -1,11 +1,11 @@
 #jwalk
-##Helper module for working with Erlang Proplist, EEP18, Mochi-style and Map representations of JSON
+##Helper module for working with Erlang proplists, eep 18, mochihson-style and map representations of JSON
 
 [![Build Status](https://travis-ci.org/jr0senblum/jwalk.svg)](https://travis-ci.org/jr0senblum/jwalk)
 [![hex.pm version](https://img.shields.io/hexpm/v/jwalk.svg)](https://hex.pm/packages/jwalk)
 
-This work is inspired by [ej](https://github.com/seth/ej), but handles map, eep-18, mochijson-style 
-and proplist representations of JSON - the types returned by
+This work is inspired by [ej](https://github.com/seth/ej), but handles map representations in addition to 
+eep18, mochijson and proplists representations of JSON - the types returned by
 [jsone](https://github.com/sile/jsone) or [jiffy](https://github.com/davisp/jiffy),
 for example. 
 Anything good about this is probably due to the contributors and maintainers of 
