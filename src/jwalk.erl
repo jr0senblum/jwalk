@@ -3,19 +3,19 @@
 %%% @copyright (C) 2015, Jim Rosenblum
 %%% @doc
 %%% The jwalk module is intended to make it easier to work with Erlang encodings
-%%% of JSON - either Maps, Proplists or eep18-style representations.
+%%% of JSON - Maps, Proplists, eep18 and mochijson tuple-in-struct  
+%%% representations are handled.
 %%%
-%%% This work is inspired by [https://github.com/seth/ej], but it handles 
-%%% maps, proplists and eep18 representations of JSON but not mochijson's 
-%%% struct/tuple encodings.
+%%% This work is inspired by [https://github.com/seth/ej], but handles 
+%%% maps in addition to the other representation types.
 %%%
 %%% Functions always take at least two parameters: a first parameter which is a
 %%% tuple of elements representing a Path into a JSON Object, and a second 
-%%% parameter which is expected to be a proplist, map or eep18 representation 
-%%% of a JSON structure.
+%%% parameter which is expected to be a valid representation of a JSON 
+%%% structure.
 %%%
 %%% The Path components of the first parameter are a tuple representation of 
-%%% a javascript-like path: i.e., 
+%%% a javascript-like, dot-path notation: i.e., 
 %%%
 %%% Obj.cars.make.model would be expressed as {"cars","make","model"}
 %%%
@@ -64,19 +64,26 @@
          set_p/3]).
 
 
--define(IS_EEP(X),  (X == [{}] orelse
+-define(IS_MOCHI(X), (X == {struct,[]} orelse
+                      is_tuple(X) andalso 
+                      element(1,X) == struct andalso
+                      is_list(element(2, X)) andalso 
+                      element(1, hd(element(2, X))) /= struct)).
+
+-define(IS_EEP(X),  (X == {[]} orelse
                      is_tuple(X) andalso 
                      is_list(element(1, X)) andalso 
-                     (hd(element(1,X)) == {} orelse 
-                     tuple_size(hd(element(1,X))) == 2))).
+                     tuple_size(hd(element(1, X))) == 2)).
 
--define(IS_PL(X), (X == {[]} orelse 
-                   (is_list(X) andalso is_tuple(hd(X)) andalso
-                   (tuple_size(hd(X)) == 0 orelse tuple_size(hd(X)) == 2)))).
+-define(IS_PL(X), (X == [{}] orelse 
+                   is_list(X) andalso 
+                   is_tuple(hd(X)) andalso
+                   (element(1, hd(X)) /= struct) andalso
+                   tuple_size(hd(X)) == 2)).
 
--define(IS_OBJ(X), (is_map(X) orelse ?IS_PL(X) orelse ?IS_EEP(X))).
--define(EMPTY_STRUCT(X), (X == [{}] orelse X == {[]})).
--define(EMPTY_OBJ(X), (X == [{}] orelse X == {[]} orelse X == #{})).
+-define(IS_OBJ(X), (is_map(X) orelse ?IS_PL(X) orelse ?IS_EEP(X) orelse ?IS_MOCHI(X))).
+-define(EMPTY_STRUCT(X), (X == [{}] orelse X == {[]}) orelse X == {struct,[]}).
+-define(EMPTY_OBJ(X), (?EMPTY_STRUCT(X) orelse X == #{})).
 -define(NOT_MAP_OBJ(X), (not is_map(X)) andalso ?IS_OBJ(X)).
 
 -define(IS_J_TERM(X), 
@@ -116,12 +123,16 @@
 -type pl()       :: [{name(), pl_value()},...].
 
 -type eep_value() :: value() | eep() | [eep_value(),...].
--type eep()    :: {[{name(), eep_value()},...]}.
--type j_obj()    :: [{}] | {[]} |  map() | pl() | eep(). 
+-type eep()       :: {[{name(), eep_value()},...]}.
 
--type jwalk_return() :: undefined | j_obj() | value() | [] | [jwalk_return(),...].
+-type mochi_value() :: value() | mochi() | [mochi_value(),...].
+-type mochi()       :: {struct,[{name(), mochi_value()},...]}.
 
--type obj_type() :: map | proplist | eep.
+-type j_obj()    :: [{}] | {[]} |  {struct, []} | map() | pl() | eep() | mochi(). 
+
+-type jwalk_return() :: undefined|j_obj()|value()|[]|[jwalk_return(),...].
+
+-type obj_type() :: map | proplist | eep | mochi.
 
 -export_type ([jwalk_return/0, j_obj/0]).
 
@@ -313,6 +324,9 @@ walk([Name|Path], Obj) when ?IS_OBJ(Obj) ->
 walk([S|Path], {[_|_]=Array}) ->
     walk([S|Path], Array);
 
+walk([S|Path], {struct, [_|_]=Array}) ->
+    walk([S|Path], Array);
+
 % ARRAY with a Selector/Index: continue with selected subset.
 walk([{select, {_,_}}=S|Path], [_|_]=Array) ->
     continue(subset_from_selector(S, Array), Path);
@@ -322,7 +336,7 @@ walk([S|Path], [_|_]=Array) when ?IS_INDEX(S) ->
 
 % ARRAY with a Member Name: continue with the values from the Objects in the
 % Array that have Member = {Name, Value}.
-walk([Name|Path], [_|_]=Array) ->
+walk([Name|Path], [_|_]=Array) -> 
     continue(values_from_member(Name, Array), Path);
 
 % Element is something other than an ARRAY, but we have a selector.
@@ -337,8 +351,10 @@ walk([S|_], Element) when ?IS_SELECTOR(S) ->
 
 continue(false, _Path)                         -> undefined;
 continue(undefined, _Path)                     -> undefined;
+continue({struct,_}=Value, Path) when Path == [] -> Value;
 continue({_Name, Value}, Path) when Path == [] -> Value;
 continue(Value, Path) when Path == []          ->  Value;
+continue({struct,_}=Value, Path) -> walk(Path, Value);
 continue({_Name, Value}, Path)                 -> walk(Path, Value);
 continue(Value, Path)                          -> walk(Path, Value).
 
@@ -378,22 +394,25 @@ set_([Name], Obj, Val, _Acc, _IsP, _RType) when ?IS_OBJ(Obj) andalso
 % Members applied to an empty object, if set_p, create it and move on
 set_([Name|Ps], Obj, Val, _Acc, true, RType) when ?EMPTY_STRUCT(Obj),
                                                           ?NOT_SELECTOR(Name) ->
-    eep_or_pl(RType, 
-              [{Name, set_(Ps, empty(RType), Val, [], true, RType)}]);
+    eep_pl_or_mochi(RType, 
+                    [{Name, set_(Ps, empty(RType), Val, [], true, RType)}]);
 
 
 % Iterate Members for one w/ name=Name. Replace value with recur call if found.
-set_([Name|Ps]=Path, Obj, Val, Acc, IsP, RType) when ?NOT_MAP_OBJ(Obj), ?NOT_SELECTOR(Name) ->
-    {N,V,Ms} = normalize_members(Obj), % first member Name, Value and rest of Members
+set_([Name|Ps]=Path, Obj, Val, Acc, IsP, RType) when ?NOT_MAP_OBJ(Obj), 
+                                                          ?NOT_SELECTOR(Name) ->
+    {N,V,Ms} = normalize_members(Obj), % 1st member Name, Val & rest of Members
     case Name of
         N ->
             NewVal = set_(Ps, V, Val, [], IsP, RType),
-            eep_or_pl(RType,
-                      lists:append(lists:reverse(Acc),[{N, NewVal}|Ms]));
+            eep_pl_or_mochi(RType,
+                            lists:append(lists:reverse(Acc),[{N, NewVal}|Ms]));
         _Other when Ms /= [] ->
             set_(Path, Ms, Val, [{N,V}|Acc], IsP, RType);
         _Other when Ms == [], IsP == true->
-            lists:append(lists:reverse(Acc), [{N,V},  {Name, set_(Ps, empty(RType), Val, [], IsP, RType)}]);
+            lists:append(lists:reverse(Acc), 
+                         [{N,V}, 
+                          {Name, set_(Ps, empty(RType), Val, [], IsP, RType)}]);
         _Other when Ms == []  -> 
             throw({no_path, Name})
     end;
@@ -441,6 +460,10 @@ set_([new], [_|_]=Array, Val, _Acc, _P, _RType) ->
 set_([{select,{_,_}}=S], {[_|_]=Array}, Val, Acc, P, RType) when ?IS_OBJ(Val) ->
     set_([S], Array, Val, Acc, P, RType);
 
+set_([{select,{_,_}}=S], {struct, [_|_]=Array}, Val, Acc, P, RType) when 
+                                                                 ?IS_OBJ(Val) ->
+    set_([S], Array, Val, Acc, P, RType);
+
 set_([{select,{K,V}}=S], [_|_]=Array, Val, _Acc, _P, RType) when ?IS_OBJ(Val) ->
     Found = subset_from_selector(S, Array),
     Replace = case Found of
@@ -469,7 +492,6 @@ set_([{select,{K,V}}=S|Ks], Array, Val, _Acc, P, RType) ->
               end,
     Replaced = set_(Ks, Objects, Val, [], P, RType),
     replace_object(Array, Found, Replaced);
-
 
 
 % Path component is index, make Val the index-ed element of the Array.
@@ -614,8 +636,8 @@ found_elements(Name, Array) ->
       Result :: [j_obj() | undefined] | undefined.
 
 values_from_member(Name, Array) ->
-    Elements = [walk([Name], Obj) || Obj <- Array, ?IS_OBJ(Obj)],
 
+    Elements = [walk([Name], Obj) || Obj <- Array, ?IS_OBJ(Obj)],
     case Elements of
         [] -> undefined;
         _ -> dont_nest(Elements)
@@ -625,8 +647,11 @@ values_from_member(Name, Array) ->
 % Make sure that we always return an Array - proplists can be over flattened.
 dont_nest(H) -> 
     A = lists:flatten(H),
+
     case A of
-        [{_,_}|_] = Obj ->
+        [{struct,_}|_] = Obj  ->    
+            Obj;
+        [{_,_}|_] = Obj -> 
             [Obj];
         _ ->
             A
@@ -679,22 +704,26 @@ index_to_n(_Array, Integer) -> Integer.
 %% -----------------------------------------------------------------------------
 
 % Convert a list to an object-specific representation.
--spec eep_or_pl(proplist | eep, [tuple()]) -> eep() | pl().
+-spec eep_pl_or_mochi(proplist|eep|mochi, [tuple()]) ->  eep() | pl() | mochi().
 
-eep_or_pl(proplist, Item) ->  Item;
-eep_or_pl(eep, Item)      -> {Item}.
+eep_pl_or_mochi(proplist, Item) ->  Item;
+eep_pl_or_mochi(eep, Item)      -> {Item};
+eep_pl_or_mochi(mochi, Item)    -> {struct, Item}.
 
 
 % Return the correct empty object representation.
 empty(proplist) -> [{}];
 empty(eep)      -> {[]};
-empty(map)      -> #{}.
+empty(map)      -> #{};
+empty(mochi)    -> {struct,[]}.
 
 
 % A few functions need the first Member and the ballance of members, but this is
 % reprsentation-specific. 
 normalize_members([{N,V}|Ms]) ->   {N, V, Ms};
-normalize_members({[{N,V}|Ms]}) -> {N, V, Ms}.
+normalize_members({[{N,V}|Ms]}) -> {N, V, Ms};
+normalize_members({struct, [{N,V}|Ms]}) -> {N, V, Ms}.
+
 
 
 % Return the member with name, Name, from an object.
@@ -704,6 +733,12 @@ get_member(Name, #{}=Obj) ->
     map_get(Name, Obj, undefined);
 
 get_member(Name, {PrpLst}) ->
+    case lists:keyfind(Name, 1, PrpLst) of
+        {Name, Value} -> Value;
+        false -> undefined
+    end;
+
+get_member(Name, {struct, PrpLst}) ->
     case lists:keyfind(Name, 1, PrpLst) of
         {Name, Value} -> Value;
         false -> undefined
@@ -725,6 +760,9 @@ delete_member(Name, #{}=Obj) ->
 delete_member(Name, {PrpLst}) ->
     {proplists:delete(Name, PrpLst)};
 
+delete_member(Name, {struct, PrpLst}) ->
+    {struct, proplists:delete(Name, PrpLst)};
+
 delete_member(Name, Obj) ->
     proplists:delete(Name, Obj).
 
@@ -741,11 +779,18 @@ add_member(Name, Val, [{}]) ->
 add_member(Name, Val, {[]}) ->
     {[{Name, Val}]};
 
+add_member(Name, Val, {struct, []}) ->
+    {struct, [{Name, Val}]};
+
 add_member(Name, Val, [{_,_}|_]=Obj) ->
     lists:keystore(Name, 1, Obj, {Name, Val});
 
 add_member(Name, Val, {[{_,_}|_]=PrpLst}) ->
-    {lists:keystore(Name, 1, PrpLst, {Name, Val})}.
+    {lists:keystore(Name, 1, PrpLst, {Name, Val})};
+
+add_member(Name, Val, {struct, [{_,_}|_]=PrpLst}) ->
+    {struct, lists:keystore(Name, 1, PrpLst, {Name, Val})}.
+
 
 
 % Modify each Obj from the list of objects, by merging the Members of Object into Obj.
@@ -756,6 +801,13 @@ merge_members([#{}|_] = Maps, Target) ->
 merge_members(Objects, M) ->
     [merge_pl(O, M) || O <- Objects].
 
+
+
+merge_pl({struct, P1}, [{K,V}|Ts]) ->
+    merge_pl({struct, lists:keystore(K, 1, P1, {K,V})}, Ts);
+
+merge_pl({struct, P1}, {struct,[{K,V}|Ts]}) ->
+    merge_pl({struct, lists:keystore(K, 1, P1, {K,V})}, Ts);
 
 merge_pl({P1}, [{K,V}|Ts]) ->
     merge_pl({lists:keystore(K, 1, P1, {K,V})}, Ts);
@@ -799,6 +851,7 @@ make_binary({select, {K, V}}) ->
 rep_type(#{}) -> map;
 rep_type([{}]) -> proplist;
 rep_type({[]}) -> eep;
+rep_type({struct, _}) -> mochi;
 rep_type([#{}|_]) -> map;
 rep_type([{_,_}|_]) -> proplist;
 rep_type({[_|_]})  -> eep;

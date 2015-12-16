@@ -1,13 +1,13 @@
 #jwalk
-##Helper module for working with Erlang Proplist, EEP18 and Map representations of JSON
+##Helper module for working with Erlang Proplist, EEP18 Mochi-style aand Map representations of JSON
 
 [![Build Status](https://travis-ci.org/jr0senblum/jwalk.svg)](https://travis-ci.org/jr0senblum/jwalk)
 [![hex.pm version](https://img.shields.io/hexpm/v/jwalk.svg)](https://hex.pm/packages/jwalk)
 
-This work is inspired by [ej](https://github.com/seth/ej), but this implementation
-handles map, eep-18 and proplist representations of JSON - the types returned by
+This work is inspired by [ej](https://github.com/seth/ej), but handles map, eep-18, mochijson-style 
+and proplist representations of JSON - the types returned by
 [jsone](https://github.com/sile/jsone) or [jiffy](https://github.com/davisp/jiffy),
-for example. It does not handle mochijson-style, tuple-in-struct encodings. 
+for example. 
 Anything good about this is probably due to the contributors and maintainers of 
 ej, anything bad or awkward is completely my fault.
 
@@ -46,8 +46,8 @@ $ make start
 ##Functions
 Functions always take at least two parameters: a first parameter which is a
 tuple of elements representing a Path into a JSON Object, and a second 
-parameter which is expected to be a proplist, map or eep18 representation of 
-a JSON structure.
+parameter which is expected to be a valid JSON representation (map, proplist, etc.).
+
 
 * ``jwalk:delete(Path, Object)`` - Removes the value at the location 
 specified by Path from Object and returns a new structure
@@ -91,20 +91,20 @@ Examples follow.
 
 then
 	
-	1> jwalk:get({"edged",{select,{"distance","medium"}}},Weapons).
-	[[{<<"type">>,<<"swords">>},{<<"distance">>,<<"medium">>}],
- 	[{<<"type">>,<<"bayonets">>},{<<"distance">>,<<"medium">>}]]
+    1> jwalk:get({"edged", {select, {"distance","medium"}}},Weapons).
+    [[{<<"type">>,<<"swords">>},{<<"distance">>,<<"medium">>}],
+    [{<<"type">>,<<"bayonets">>},{<<"distance">>,<<"medium">>}]]
 
-	2> jwalk:get({"edged",{select,{"distance","medium"}},1},Weapons).
-	[{<<"type">>,<<"swords">>},{<<"distance">>,<<"medium">>}]
+    2> jwalk:get({"edged",{select,{"distance","medium"}},1},Weapons).
+    [{<<"type">>,<<"swords">>},{<<"distance">>,<<"medium">>}]
 
-	3> jwalk:get({"edged",{select,{"distance","medium"}},1,"type"},Weapons).
-	<<"swords">>
+    3> jwalk:get({"edged",{select,{"distance","medium"}},1,"type"},Weapons).
+    <<"swords">>
 	
-	% setting an element ...
-	4> W2 = jwalk:set({"edged",3, "distance"}, Weapons, <<"very close">>).
+    % setting an element ...
+    4> W2 = jwalk:set({"edged",3, "distance"}, Weapons, <<"very close">>).
     [{<<"edged">>,
-      [[{<<"type">>,<<"swords">>},{<<"distance">>,<<"medium">>}],
+     [[{<<"type">>,<<"swords">>},{<<"distance">>,<<"medium">>}],
       [{<<"type">>,<<"bayonets">>},{<<"distance">>,<<"medium">>}],
       [{<<"type">>,<<"daggers">>},{<<"distance">>,<<"very close">>}]]}]
     
@@ -142,8 +142,8 @@ Given a map:
 then
     
 
-	1> jwalk:get({"widget","debug"},Obj).
-	<<"on">>
+    1> jwalk:get({"widget","debug"},Obj).
+    <<"on">>
 	
 	2> jwalk:get({"widget","text"},Obj).
 	#{<<"alignment">> => <<"center">>,
@@ -155,16 +155,21 @@ then
   	  <<"style">> => <<"bold">>,
   	  <<"vOffset">> => 100}
       
-   set_p creates intermediary nodes: 
+set_p creates intermediary nodes: 
 
 	1> jwalk:set_p({"users", {select, {"name", "sebastian"}}, "location"}, #{}, <<"Germany">>).
     #{<<"users">> => [#{<<"location">> => <<"Germany">>,<<"name">> => <<"sebastian">>}]}
 
 	2> jwalk:set_p({"users", {select, {"name", "sebastian"}}, "location"}, [{}],    <<"Germany">>).	[{<<"users">>,
 	  [[{<<"name">>,<<"sebastian">>},
-        {<<"location">>,<<"Germany">>}]]}]
+            {<<"location">>,<<"Germany">>}]]}]
 
     3> jwalk:set_p({"users", {select, {"name", "sebastian"}}, "location"}, {[]},    <<"Germany">>).
 	{[{<<"users">>,
    	  [{[{<<"name">>,<<"sebastian">>},
-         {<<"location">>,<<"Germany">>}]}]}]}
+             {<<"location">>,<<"Germany">>}]}]}]}
+
+    4> jwalk:set_p({"users", {select, {"name", "sebastian"}}, "location"}, {struct,[]}, <<"Germany">>).
+    {struct,[{<<"users">>,
+        [{struct,[{<<"name">>,<<"sebastian">>},
+                  {<<"location">>,<<"Germany">>}]}]}]}
