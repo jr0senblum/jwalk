@@ -1,5 +1,5 @@
 #jwalk
-##Helper module for working with Erlang Proplist, EEP18 Mochi-style aand Map representations of JSON
+##Helper module for working with Erlang Proplist, EEP18, Mochi-style and Map representations of JSON
 
 [![Build Status](https://travis-ci.org/jr0senblum/jwalk.svg)](https://travis-ci.org/jr0senblum/jwalk)
 [![hex.pm version](https://img.shields.io/hexpm/v/jwalk.svg)](https://hex.pm/packages/jwalk)
