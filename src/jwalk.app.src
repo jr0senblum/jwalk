@@ -1,10 +1,10 @@
 {application, jwalk,
  [
-  {description, "Helper module for working with Erlang proplists, map, eep 18 and mochijson-style representations of JSON"},
-  {vsn, "1.1.0"},
+  {description, "Helper module for working with Erlang representations of JSON, handling eep-18, map, mochijson-style and proplists representations"},
+  {vsn, "1.1.1"},
   {registered, []},
   {applications, [kernel, stdlib]},
-  {env,[]},
+  {env, []},
   {modules, []},
   {maintainers, ["Jim Rosenblum"]},
   {licenses, ["MIT"]},

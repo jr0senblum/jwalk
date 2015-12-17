@@ -3,7 +3,7 @@
 %%% @copyright (C) 2015, Jim Rosenblum
 %%% @doc
 %%% The jwalk module is intended to make it easier to work with Erlang encodings
-%%% of JSON - maps, proplists, eep 18 and mochijson-style  representations are 
+%%% of JSON: eep-18, maps, mochijson-style and proplists representations are 
 %%% handled.
 %%%
 %%% This work is inspired by [https://github.com/seth/ej], but handles 
@@ -143,13 +143,13 @@
 %% binary if not. 
 %%
 %% Throws <br/>
-%% {no_path, _} <br/>
+%% @throws no_path
 %% {selector_used_on_object, _} <br/>
 %% {selector_used_on_non_array, _, _} <br/>
 %% {index_for_non_array, _} <br/>
 %% {replacing_object_with_value, _} <br/>
 %% {index_out_of_bounds, _, _}.
-%%
+%% 
 -spec delete(Path, Object) -> NewObject when
       Path      :: path(),
       Object    :: j_obj(),
@@ -171,8 +171,12 @@ delete(Path, Object) ->
 %% binary if not.
 %%
 %% Throws <br/>
+%% {no_path, _} <br/>
 %% {selector_used_on_object, _} <br/>
+%% {selector_used_on_non_array, _, _} <br/>
 %% {index_for_non_array, _} <br/>
+%% {replacing_object_with_value, _} <br/>
+%% {index_out_of_bounds, _, _}.
 %%
 -spec get(Path, Object) -> Result when
       Path   :: path(),
@@ -335,7 +339,7 @@ walk([Name|Path], [_|_]=Array) ->
 walk([S|_], Element) when ?IS_SELECTOR(S) ->
     case S of
         {select, {_,_}} ->
-            throw({selector_for_non_array, Element});
+            throw({selector_used_on_non_array, Element});
         _ ->
             throw({index_for_non_array, Element})
     end.

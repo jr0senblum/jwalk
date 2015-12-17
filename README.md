@@ -1,13 +1,12 @@
 #jwalk
-##Helper module for working with Erlang proplists, eep 18, mochijson-style and map representations of JSON
+##Helper module for working with Erlang representations of JSON, handling eep-18, map, mochijson-style and proplists representations
+# 
 
 [![Build Status](https://travis-ci.org/jr0senblum/jwalk.svg)](https://travis-ci.org/jr0senblum/jwalk)
 [![hex.pm version](https://img.shields.io/hexpm/v/jwalk.svg)](https://hex.pm/packages/jwalk)
+# 
 
-This work is inspired by [ej](https://github.com/seth/ej), but handles map representations in addition to 
-eep18, mochijson and proplists representations of JSON - the types returned by
-[jsone](https://github.com/sile/jsone) or [jiffy](https://github.com/davisp/jiffy),
-for example. 
+This work is inspired by [ej](https://github.com/seth/ej), but handles all common JSON representations: eep-18, map, mochijson-style and proplists - the types returned by [jsone](https://github.com/sile/jsone), [jiffy](https://github.com/davisp/jiffy) and [mochijson](https://github.com/mochi/mochiweb), for example. 
 Anything good about this is probably due to the contributors and maintainers of 
 ej, anything bad or awkward is completely my fault.
 
@@ -38,31 +37,37 @@ $ make dialyze
 #### Erlang shell
 $ make start
 
-1> jwalk:get({"one"},#{<<"one">> => 1}).
-
-1
+    1> jwalk:get({"one"},#{<<"one">> => 1}).
+    1
+    2> jwalk:get({"one"},[{<<"one">>, 1}]).
+    1
+    3> jwalk:get({"one"},{[{<<"one">>, 1}]}).
+    1
+    4>  jwalk:get({"one"},{struct, [{<<"one">>, 1}]}).
+    1
 
 
 ##Functions
-Functions always take at least two parameters: a first parameter which is a
+Jwalk functions always take at least two parameters: a first parameter which is a
 tuple of elements representing a Path into a JSON Object, and a second 
 parameter which is expected to be a valid JSON representation (map, proplist, etc.).
 
 
-* ``jwalk:delete(Path, Object)`` - Removes the value at the location 
-specified by Path from Object and returns a new structure
-* ``jwalk:get(Path, Object)``, ``jwalk:get(Path, Object, Default)``  - Returns the 
-Value at the specificed Path from Object, or undefined or Default if not found
-* ``jwalk:set(Path, Object, Value)`` - Sets a Value in Object at the specified
-Path and returns the new structure
-* ``jwalk:set_p(Path, Object, Value)`` - Sets a Value in an Object at the specified
-Path creating intermediate nodes as necessary and returns the new structure
+* ``jwalk:delete(Path, Object) -> Result`` </br>
+ Removes the value at the location specified by Path from Object and returns a new structure </br></br>
+* ``jwalk:get(Path, Object) -> Result | undefined``, </br>
+ ``jwalk:get(Path, Object, Default) -> Result | Default``</br>
+ Returns the Value at the specificed Path from Object, or undefined or Default if not found </br> </br>
+* ``jwalk:set(Path, Object, Value) -> Result``</br>
+Sets a Value in Object at the specified Path and returns the new structure </br> </br>
+* ``jwalk:set_p(Path, Object, Value) -> Result``</br>
+Sets a Value in an Object at the specified Path creating intermediate nodes as necessary and 
+returns the new structure
 
 ###Paths
 Paths into JSON Objects are expressed using a tuple of Path elements, a 
 representation of a javascript-like path: i.e.,
-``Obj.weapons.edged.distance``  would be expressed as 
-``{"weapons","edged","distance"}``. 
+``Obj.weapons.edged.distance``  becomes ``{"weapons","edged","distance"}``. 
 Path elements representing JSON Member Names can be strings or binary, they 
 will be internally converted to binary regardless.
 
@@ -73,11 +78,9 @@ be
 an element out of a JSON Array.
 * ``{select, {"name","value"|value}}`` which will select a subset of JSON objects 
 from an Array that have a Member ``{"Name": "Value"|Value}`` 
-* `new` for set/2 and set_p/2, when the final element of a Path is the atom 
-`new`, the supplied value is added to the stucture as the first element of
-an Array, the Array is created if necessary
+* The atom `new`, used in conjunction with the functions set/2 and set_p/2, as the final element of a Path will add the supplied value to the stucture as the first element of an Array, the Array is created if necessary
 
-Path, string elements can be binary or not
+Path, string elements can be binary or not, they will be converetd to binary regardless.
 
 Examples follow.
 
