@@ -143,7 +143,7 @@
 %% binary if not. 
 %%
 %% Throws <br/>
-%% @throws no_path
+%% {no_path, _} <br/>
 %% {selector_used_on_object, _} <br/>
 %% {selector_used_on_non_array, _, _} <br/>
 %% {index_for_non_array, _} <br/>
@@ -627,9 +627,9 @@ found_elements(Name, Array) ->
 
 % Return list of Results from trying to get(Name, Obj) from each Obj an Array.
 -spec values_from_member(Name, ElementList) -> Result when
-      Name :: name(),
+      Name        :: name(),
       ElementList :: [j_obj(),...],
-      Result :: [j_obj() | undefined] | undefined.
+      Result      :: [j_obj() | undefined] | undefined.
 
 values_from_member(Name, ElementList) ->
 
@@ -653,10 +653,10 @@ dont_nest(H) ->
      end.
 
 
-% Select out subset of Object/s that contain Member {K:V}
+% Select out a subset of Objects that contain Member {K:V}
 -spec subset_from_selector(select(), [j_obj()|value()]) -> [j_obj()].
 
-subset_from_selector({select, {K,V}}, Array) -> 
+subset_from_selector({select, {K, V}}, Array) -> 
     F = fun(Obj) when ?IS_OBJ(Obj) -> 
                 get_member(K, Obj) == V;
            (_) -> false
@@ -664,32 +664,18 @@ subset_from_selector({select, {K,V}}, Array) ->
     lists:filter(F, Array).
 
 
-% Faster than A -- B, hopefully.
--spec remove([j_obj()|value()], [j_obj()|value()]) -> [j_obj()|value()].
-
-remove(Objects, []) -> Objects;
-remove(Objects, Remove) -> 
-    lists:reverse(ordsets:to_list(
-                    ordsets:subtract(ordsets:from_list(Objects),
-                                     ordsets:from_list(Remove)))).
-
-
 % Select out nth Object from Array.
 -spec nth(p_index(), [j_obj()|value()]) -> j_obj().
 
-nth(first, L) ->
-    hd(L);
-nth(last, L) ->
-    lists:last(L);
-nth(N, L)  when N =< length(L) ->
-    lists:nth(N, L);
-nth(N, L)  when N > length(L) ->
-    throw({index_out_of_bounds, N, L}).
+nth(first, L)                  -> hd(L);
+nth(last, L)                   -> lists:last(L);
+nth(N, L)  when N =< length(L) -> lists:nth(N, L);
+nth(N, L)  when N > length(L)  -> throw({index_out_of_bounds, N, L}).
 
 
 % Translate a Path element index to an integer index.
-index_to_n(_Array, first) -> 1;
-index_to_n(Array, last) -> length(Array);
+index_to_n(_Array, first)   -> 1;
+index_to_n(Array, last)     -> length(Array);
 index_to_n(_Array, Integer) -> Integer.
 
 
@@ -700,8 +686,8 @@ index_to_n(_Array, Integer) -> Integer.
 
 % Convert a list to a representation-specific structure.
 -spec eep_pl_or_mochi(Rep, Item) -> Result when
-      Rep :: proplist | eep |mochi, 
-      Item :: [tuple()],
+      Rep    :: proplist | eep | mochi, 
+      Item   :: [tuple()],
       Result ::  eep() | pl() | mochi().
 
 eep_pl_or_mochi(proplist, Item) ->  Item;
@@ -717,14 +703,14 @@ empty(mochi)    -> {struct,[]}.
 
 
 % A few functions need the first Member and the ballance of Members, but this is
-% reprsened in a representation-specific way.
+% representation-specific way.
 normalize_members([{N,V}|Ms]) ->   {N, V, Ms};
 normalize_members({[{N,V}|Ms]}) -> {N, V, Ms};
 normalize_members({struct, [{N,V}|Ms]}) -> {N, V, Ms}.
 
 
-% Return the Member with name, Name, from an object.
--spec get_member(name(), j_obj()) -> term() | 'undefined'.
+% Return the Member with name, Name, from an Object or undefined.
+-spec get_member(Name::name(), Obj::j_obj()) -> Result::term() | 'undefined'.
 
 get_member(Name, #{}=Obj) ->
     map_get(Name, Obj, undefined);
@@ -764,7 +750,7 @@ delete_member(Name, Obj) ->
     proplists:delete(Name, Obj).
 
 
-% Add a Member, {Name: Value} into an object.
+% Add a Member, {Name: Value} into an Object.
 -spec add_member(name(), value(), j_obj()) -> j_obj().
 
 add_member(Name, Val, #{}=Obj) ->
@@ -790,19 +776,18 @@ add_member(Name, Val, {struct, [{_,_}|_]=PrpLst}) ->
 
 
 
-% Modify each Obj from the list of Objects, by merging the Members of Object 
-% into each Obj.
--spec merge_members(Objects, Object) -> NewObjects when
-      Objects     :: [j_obj()], 
-      Object      :: j_obj(),
-       NewObjects :: [j_obj()].
+% Modify each Obj from the list of Objects, by merging: overwrite value 
+% from Donor if Member exists in Obj, else create Member.
+-spec merge_members(Objects, Donor) -> NewObjects when
+      Objects    :: [j_obj()], 
+      Donor      :: j_obj(),
+      NewObjects :: [j_obj()].
 
-merge_members([#{}|_] = Maps, Target) ->
-    [maps:merge(M, Target) || M <- Maps];
+merge_members([#{}|_] = Maps, Donor) ->
+    [maps:merge(M, Donor) || M <- Maps];
 
-merge_members(Objects, M) ->
-    [merge_pl(O, M) || O <- Objects].
-
+merge_members(Objects, Donor) ->
+    [merge_pl(Obj, Donor) || Obj <- Objects].
 
 
 merge_pl({struct, P1}, [{K,V}|Ts]) ->
@@ -842,14 +827,21 @@ to_binary_list(Keys) ->
     lists:map(fun(K) -> make_binary(K) end, L).
 
 
-make_binary(K) when is_binary(K); is_number(K) -> K;
+% Faster than A -- B, hopefully.
+remove(Objects, [])     -> Objects;
+remove(Objects, Remove) -> 
+    lists:reverse(ordsets:to_list(
+                    ordsets:subtract(ordsets:from_list(Objects),
+                                     ordsets:from_list(Remove)))).
+
+
 make_binary(K) when is_list(K) -> list_to_binary(K);
-make_binary(K) when is_atom(K) -> K;
+make_binary(K) when is_binary(K); is_number(K); is_atom(K) -> K;
 make_binary({select, {K, V}}) -> 
     {select, {make_binary(K), make_binary(V)}}.
 
 
-% Look for the first object and returns its representation type.
+% Look for the first object and return its representation type.
 rep_type(#{}) -> map;
 rep_type([{}]) -> proplist;
 rep_type({[]}) -> eep;
