@@ -349,7 +349,7 @@ continue(false, _Path)                           -> undefined;
 continue(undefined, _Path)                       -> undefined;
 continue({struct,_}=Value, Path) when Path == [] -> Value;
 continue({_Name, Value}, Path) when Path == []   -> Value;
-continue(Value, Path) when Path == []            ->  Value;
+continue(Value, Path) when Path == []            -> Value;
 continue({struct,_}=Value, Path)                 -> walk(Path, Value);
 continue({_Name, Value}, Path)                   -> walk(Path, Value);
 continue(Value, Path)                            -> walk(Path, Value).
@@ -819,12 +819,17 @@ merge_pl(P1, []) ->
 
 
 % Convert path elements to a list of elements where Names are binary.
+to_binary_list(Keys) when is_tuple(Keys) ->
+    lists:map(fun(K) -> make_binary(K) end, tuple_to_list(Keys));
+
 to_binary_list(Keys) ->
-    L = case is_tuple(Keys) of
-            true -> tuple_to_list(Keys);
-            false -> Keys
-        end,
-    lists:map(fun(K) -> make_binary(K) end, L).
+    lists:map(fun(K) -> make_binary(K) end, Keys).
+
+
+make_binary(K) when is_list(K) -> iolist_to_binary(K);
+make_binary({select, {K, V}}) -> 
+    {select, {iolist_to_binary(K), make_binary(V)}};
+make_binary(K) -> K.
 
 
 % Faster than A -- B, hopefully.
@@ -833,12 +838,6 @@ remove(Objects, Remove) ->
     lists:reverse(ordsets:to_list(
                     ordsets:subtract(ordsets:from_list(Objects),
                                      ordsets:from_list(Remove)))).
-
-
-make_binary(K) when is_list(K) -> list_to_binary(K);
-make_binary(K) when is_binary(K); is_number(K); is_atom(K) -> K;
-make_binary({select, {K, V}}) -> 
-    {select, {make_binary(K), make_binary(V)}}.
 
 
 % Look for the first object and return its representation type.
