@@ -3,7 +3,7 @@
 %%% @copyright (C) 2015, Jim Rosenblum
 %%% @doc
 %%% The jwalk module is intended to make it easier to work with Erlang encodings
-%%% of JSON: eep-18, maps, mochijson-style and proplists representations are 
+%%% of JSON: eep 18, maps, mochijson-style and proplists representations are 
 %%% handled.
 %%%
 %%% This work is inspired by [https://github.com/seth/ej], but handles 
@@ -366,8 +366,7 @@ continue(Value, Path)                            -> walk(Path, Value).
       NewObj :: j_obj().
 
 % Final Path element: DELETE.
-set_([Name], Obj, delete, _Acc, _IsP, _RType) when ?IS_OBJ(Obj) andalso
-                                                          ?NOT_SELECTOR(Name) ->
+set_([Name], Obj, delete, _Acc, _IsP, _RType) when ?IS_OBJ(Obj) andalso ?NOT_SELECTOR(Name) ->
     delete_member(Name, Obj);
 
 set_([S], [_|_]=Array, delete, _Acc, _IsP, _RType) when ?IS_INDEX(S)->
@@ -382,21 +381,17 @@ set_([Name], [_|_]=Array, delete, _Acc, _IsP, _RType) ->
 
 
 % Final Path element: if it exists in the OBJECT replace or create it.
-set_([Name], Obj, Val, _Acc, _IsP, _RType) when ?IS_OBJ(Obj) andalso
-                                                          ?NOT_SELECTOR(Name) ->
+set_([Name], Obj, Val, _Acc, _IsP, _RType) when ?IS_OBJ(Obj) andalso ?NOT_SELECTOR(Name) ->
     add_member(Name, Val, Obj);
 
 
 % Members applied to an empty object, if set_p, create it and move on
-set_([Name|Ps], Obj, Val, _Acc, true, RType) when ?EMPTY_STRUCT(Obj),
-                                                          ?NOT_SELECTOR(Name) ->
-    eep_pl_or_mochi(RType, 
-                    [{Name, set_(Ps, empty(RType), Val, [], true, RType)}]);
+set_([Name|Ps], Obj, Val, _Acc, true, RType) when ?EMPTY_STRUCT(Obj), ?NOT_SELECTOR(Name) ->
+    eep_pl_or_mochi(RType, [{Name, set_(Ps, empty(RType), Val, [], true, RType)}]);
 
 
 % Iterate Members for one w/ name=Name. Replace value with recur call if found.
-set_([Name|Ps]=Path, Obj, Val, Acc, IsP, RType) when ?NOT_MAP_OBJ(Obj), 
-                                                          ?NOT_SELECTOR(Name) ->
+set_([Name|Ps]=Path, Obj, Val, Acc, IsP, RType) when ?NOT_MAP_OBJ(Obj), ?NOT_SELECTOR(Name) ->
     {N,V,Ms} = normalize_members(Obj), % 1st member Name, Val & rest of Members
     case Name of
         N ->
@@ -456,8 +451,7 @@ set_([new], [_|_]=Array, Val, _Acc, _P, _RType) ->
 set_([{select,{_,_}}=S], {[_|_]=Array}, Val, Acc, P, RType) when ?IS_OBJ(Val) ->
     set_([S], Array, Val, Acc, P, RType);
 
-set_([{select,{_,_}}=S], {struct, [_|_]=Array}, Val, Acc, P, RType) when 
-                                                                 ?IS_OBJ(Val) ->
+set_([{select, {_,_}}=S], {struct, [_|_]=Array}, Val, Acc, P, RType) when ?IS_OBJ(Val) ->
     set_([S], Array, Val, Acc, P, RType);
 
 set_([{select,{K,V}}=S], [_|_]=Array, Val, _Acc, _P, RType) when ?IS_OBJ(Val) ->
