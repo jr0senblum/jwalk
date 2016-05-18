@@ -163,7 +163,8 @@ set_p creates intermediary nodes:
 	1> jwalk:set_p({"users", {select, {"name", "sebastian"}}, "location"}, #{}, <<"Germany">>).
     #{<<"users">> => [#{<<"location">> => <<"Germany">>,<<"name">> => <<"sebastian">>}]}
 
-	2> jwalk:set_p({"users", {select, {"name", "sebastian"}}, "location"}, [{}],    <<"Germany">>).	[{<<"users">>,
+	2> jwalk:set_p({"users", {select, {"name", "sebastian"}}, "location"}, [{}],    <<"Germany">>).
+	[{<<"users">>,
 	  [[{<<"name">>,<<"sebastian">>},
             {<<"location">>,<<"Germany">>}]]}]
 
