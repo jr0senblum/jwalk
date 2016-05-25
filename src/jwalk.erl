@@ -150,7 +150,7 @@
 %% {replacing_object_with_value, _} <br/>
 %% {index_out_of_bounds, _, _}.
 %% 
--spec delete(Path, Object) -> NewObject when
+-spec delete(Path, Object) -> NewObject | no_return() when
       Path      :: path(),
       Object    :: j_obj(),
       NewObject :: j_obj().
@@ -178,7 +178,7 @@ delete(Path, Object) ->
 %% {replacing_object_with_value, _} <br/>
 %% {index_out_of_bounds, _, _}.
 %%
--spec get(Path, Object) -> Result when
+-spec get(Path, Object) -> Result | no_return() when
       Path   :: path(),
       Object :: j_obj(),
       Result :: jwalk_return().
@@ -235,7 +235,7 @@ get(Path, Object, Default) ->
 %% {replacing_object_with_value, _} <br/>
 %% {index_out_of_bounds, _, _}.
 %%
--spec set(Path, Object, Value) -> NewObject when
+-spec set(Path, Object, Value) -> NewObject | no_return() when
       Path      :: path(), 
       Object    :: j_obj(), 
       Value     :: value() | j_obj() | [value() | j_obj(),...],
