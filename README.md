@@ -2,7 +2,7 @@
 ##Helper module for working with Erlang representations of JSON: eep 18, map, mochijson-style and proplists representations
 # 
 
-[![Build Status](https://travis-ci.org/jr0senblum/jwalk.svg)](https://travis-ci.org/jr0senblum/jwalk)
+[![Build Status](https://travis-ci.org/jr0senblum/jwalk.svg?branch=master)](https://travis-ci.org/jr0senblum/jwalk)
 [![hex.pm version](https://img.shields.io/hexpm/v/jwalk.svg)](https://hex.pm/packages/jwalk)
 # 
 
