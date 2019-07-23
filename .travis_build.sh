@@ -1,6 +1,7 @@
 #!/bin/bash
 
-wget https://s3.amazonaws.com/rebar3/rebar3
+#wget https://s3.amazonaws.com/rebar3/rebar3
+rm -rf rebar3
 git clone https://github.com/erlang/rebar3.git
  cd rebar3
  ./bootstrap
