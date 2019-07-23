@@ -5,7 +5,7 @@ rm -rf rebar3
 git clone https://github.com/erlang/rebar3.git
  cd rebar3
  ./bootstrap
-cp rebar3 ../
+cp rebar3 ..
 cd ..
 
 chmod a+x ./rebar3
