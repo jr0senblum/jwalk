@@ -6,5 +6,8 @@ otp_release:
    - 18.2
    - 18.2.1
    - 19.0
+   - 20.0
+   - 21.0
+   - 22.0
 
 script: "sh -ex .travis_build.sh"
