@@ -3,7 +3,7 @@
 wget https://s3.amazonaws.com/rebar3/rebar3
 
 chmod a+x ./rebar3
-./rebar3 unlock
-./rebar3 update
+make clean
+make compile
+make eunit
 
-./rebar3 eunit
