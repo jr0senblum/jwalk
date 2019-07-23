@@ -26,4 +26,4 @@ script:
 after_success:
   - codecov
 
-script: "sh -ex .travis_build.sh"
+
