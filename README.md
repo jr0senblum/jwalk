@@ -1,7 +1,6 @@
-#jwalk  
-
-
-##Helper module for working with Erlang representations of JSON: eep 18, map, mochijson-style and proplists representations
+jwalk  
+=====
+## Helper module for working with Erlang representations of JSON: eep 18, map, mochijson-style and proplists representations
 # 
 
 [![Build Status](https://travis-ci.org/jr0senblum/jwalk.svg?branch=master)](https://travis-ci.org/jr0senblum/jwalk)
@@ -12,7 +11,7 @@ This work is inspired by [ej](https://github.com/seth/ej), but handles all commo
 Anything good about this is probably due to the contributors and maintainers of 
 ej, anything bad or awkward is completely my fault.
 
-###Dependencies
+### Dependencies  
 The source code is a single file, and there are no dependencies other than:
 
 * Erlang 17.0 +
@@ -21,7 +20,7 @@ The source code is a single file, and there are no dependencies other than:
 Hex package manager is used for package management.
 
 
-###QuickStart
+### QuickStart  
 ##### clone
 $ git clone git://github.com/jr0senblum/jwalk.git
 
@@ -49,7 +48,7 @@ $ make start
     1
 
 
-##Functions
+## Functions  
 Jwalk functions always take at least two parameters: a first parameter which is a
 tuple of elements representing a Path into a JSON Object, and a second 
 parameter which is expected to be a valid JSON representation (map, proplist, etc.).
@@ -66,7 +65,7 @@ Sets a Value in Object at the specified Path and returns the new structure </br>
 Sets a Value in an Object at the specified Path creating intermediate nodes as necessary and 
 returns the new structure
 
-###Paths
+### Paths  
 Paths into JSON Objects are expressed using a tuple of Path elements, a 
 representation of a javascript-like path: i.e.,
 ``Obj.weapons.edged.distance``  becomes ``{"weapons","edged","distance"}``. 
@@ -86,7 +85,7 @@ Path, string elements can be binary or not, they will be converetd to binary reg
 
 Examples follow.
 
-###Usage Examples
+### Usage Examples 
     Weapons = [{<<"edged">>, [[{<<"type">>, <<"swords">>}, {<<"distance">>, <<"medium">>}],   
                               [{<<"type">>, <<"bayonets">>},  {<<"distance">>, <<"medium">>}],
                               [{<<"type">>, <<"daggers">>}, {<<"distance">>, <<"close">>}]                            
