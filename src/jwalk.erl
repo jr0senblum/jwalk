@@ -1,13 +1,13 @@
 %%% ----------------------------------------------------------------------------
 %%% @author Jim Rosenblum <jrosenblum@prodigy.net>
-%%% @copyright (C) 2015, Jim Rosenblum
+%%% @copyright (C) 2015 - 2020, Jim Rosenblum
 %%% @doc
 %%% The jwalk module is intended to make it easier to work with Erlang encodings
-%%% of JSON: eep 18, maps, mochijson-style and proplists representations are 
-%%% handled.
+%%% of JSON, specifically: eep 18, maps, mochijson-style and proplists 
+%%% representations.
 %%%
 %%% This work is inspired by [https://github.com/seth/ej], but handles 
-%%% maps in addition to the other representation types.
+%%% additional representation types, including maps.
 %%%
 %%% Functions always take at least two parameters: a first parameter which is a
 %%% tuple of elements representing a Path into a JSON Object, and a second 
@@ -24,8 +24,10 @@
 %%% The atoms `` 'first' '' and `` 'last' '' or an integer index indicating an 
 %%% element from a JSON Array; or,
 %%%
-%%% {`select', {"name","value"}} which will return a subset of JSON objects in 
-%%% an Array that have a {"name":"value"} Member. 
+%%% {`select', {"name","value"}} which will return the subset of JSON objects 
+%%% in an Array that have a {"name":"value"} Member. 
+%%%
+%%% {`select', 'all'} which will return all Objects in an array.
 %%%
 %%% `new': for set/2 and set_p/2, when the final element of a path is the atom 
 %%% `new', the supplied value is added to the stucture as the first element of
@@ -66,8 +68,8 @@
 
 -define(IS_MOCHI(X), (X == {struct,[]} orelse
                       is_tuple(X) andalso 
-                      element(1,X) == struct andalso
-                      is_list(element(2, X)) andalso 
+                      element(1, X) == struct andalso
+                      is_list(element(2, X))  andalso 
                       element(1, hd(element(2, X))) /= struct)).
 
 -define(IS_EEP(X),  (X == {[]} orelse
@@ -106,7 +108,7 @@
 -type name()     :: binary().
 -type value()    :: binary() | integer() | float() | true | false | null.
 
--type select()   :: {select, {name(), value()}}.
+-type select()   :: {select, {name(), value()} | all}.
 -type p_index()  :: 'first' | 'last' | non_neg_integer().
 -type p_elt()    :: name() | select() | p_index() | 'new'.
 -type path()     :: {p_elt()} | [p_elt(),...].
@@ -145,8 +147,8 @@
 %% Throws <br/>
 %% {no_path, _} <br/>
 %% {selector_used_on_object, _} <br/>
-%% {selector_used_on_non_array, _, _} <br/>
-%% {index_for_non_array, _} <br/>
+%% {selector_used_on_non_list, _, _} <br/>
+%% {index_for_non_list, _} <br/>
 %% {replacing_object_with_value, _} <br/>
 %% {index_out_of_bounds, _, _}.
 %% 
@@ -173,8 +175,8 @@ delete(Path, Object) ->
 %% Throws <br/>
 %% {no_path, _} <br/>
 %% {selector_used_on_object, _} <br/>
-%% {selector_used_on_non_array, _, _} <br/>
-%% {index_for_non_array, _} <br/>
+%% {selector_used_on_non_list, _, _} <br/>
+%% {index_for_non_list, _} <br/>
 %% {replacing_object_with_value, _} <br/>
 %% {index_out_of_bounds, _, _}.
 %%
@@ -230,8 +232,8 @@ get(Path, Object, Default) ->
 %% Throws <br/>
 %% {no_path, _} <br/>
 %% {selector_used_on_object, _} <br/>
-%% {selector_used_on_non_array, _, _} <br/>
-%% {index_for_non_array, _} <br/>
+%% {selector_used_on_non_list, _, _} <br/>
+%% {index_for_non_list, _} <br/>
 %% {replacing_object_with_value, _} <br/>
 %% {index_out_of_bounds, _, _}.
 %%
@@ -300,7 +302,7 @@ do_set(Path, Obj, Value, Acc, P, RepType) ->
       Result :: jwalk_return().
 
 % Some base cases.
-walk([{select, {_,_}}|_], []) ->  [];
+walk([{select, _} | _], []) ->  [];
 
 walk([], _)   -> undefined;
 
@@ -308,14 +310,22 @@ walk(_, [])   -> undefined;
 
 walk(_, null) -> undefined;
 
-walk([{select, {_, _}}|_], Obj) when ?IS_OBJ(Obj) ->
+% Can't Select or Index an Object.
+walk([{select, _} | _], Obj) when ?IS_OBJ(Obj) ->
     throw({selector_used_on_object, Obj});
 
-walk([S|_], Obj) when ?IS_OBJ(Obj), ?IS_INDEX(S) -> 
-    throw({index_for_non_array, Obj});
+walk([S | _], Obj) when ?IS_OBJ(Obj), ?IS_INDEX(S) -> 
+    throw({index_for_non_list, Obj});
 
-walk([Name|Path], Obj) when ?IS_OBJ(Obj) -> 
-    continue(get_member(Name, Obj), Path);
+% Looking for a member given an object
+walk([Name | Path], Obj) when ?IS_OBJ(Obj) -> 
+    case get_member(Name, Obj) of
+        [Obj | _] when ?IS_OBJ(Obj), ?NOT_SELECTOR(hd(Path)) ->
+          % If the member for Name is an array, next element must be a Selector.
+          undefined;
+        Member ->
+          continue(Member, Path)
+end;
 
 walk([S|Path], {[_|_]=Array}) ->
     walk([S|Path], Array);
@@ -324,11 +334,15 @@ walk([S|Path], {struct, [_|_]=Array}) ->
     walk([S|Path], Array);
 
 % ARRAY with a Selector/Index: continue with selected subset.
+walk([{select, all}|Path], [_|_]=Array) ->
+    continue(subset_from_selector(all, Array), Path);
+
 walk([{select, {_,_}}=S|Path], [_|_]=Array) ->
     continue(subset_from_selector(S, Array), Path);
 
 walk([S|Path], [_|_]=Array) when ?IS_INDEX(S) ->
     continue(nth(S, Array), Path);
+
 
 % ARRAY with a Member Name: continue with the values from the Objects in the
 % Array that have Member = {Name, Value}.
@@ -339,9 +353,9 @@ walk([Name|Path], [_|_]=Array) ->
 walk([S|_], Element) when ?IS_SELECTOR(S) ->
     case S of
         {select, {_,_}} ->
-            throw({selector_used_on_non_array, Element});
+            throw({selector_used_on_non_list, Element});
         _ ->
-            throw({index_for_non_array, Element})
+            throw({index_for_non_list, Element})
     end.
 
 
@@ -352,6 +366,7 @@ continue({_Name, Value}, Path) when Path == []   -> Value;
 continue(Value, Path) when Path == []            -> Value;
 continue({struct,_}=Value, Path)                 -> walk(Path, Value);
 continue({_Name, Value}, Path)                   -> walk(Path, Value);
+%continue([Obj|_]=A, [H|_Path]) when ?IS_OBJ(Obj), length(A)>1, ?NOT_SELECTOR(H)                         -> undefined;
 continue(Value, Path)                            -> walk(Path, Value).
 
 
@@ -504,7 +519,7 @@ set_([S|Path], [_|_]=Array, Val, _Acc, P, RType) when ?IS_SELECTOR(S) ->
     end;
 
 set_([S|_], NotArray, _Val, _Acc, _P, _RType) when ?IS_SELECTOR(S) -> 
-    throw({selector_used_on_non_array, S, NotArray});
+    throw({selector_used_on_non_list, S, NotArray});
 
 
 % Final Path component is a Name, target is an ARRAY, replace/add Member to all
@@ -543,8 +558,6 @@ set_([Name|Keys], [_|_]=Array, Val, _Acc, P, RType) ->
         _ ->
             merge_members(Array, [{Name, Objects}])
     end.
-
-
 
 
 %% ----------------------------------------------------------------------------
@@ -647,8 +660,17 @@ dont_nest(H) ->
      end.
 
 
-% Select out a subset of Objects that contain Member {K:V}
+% Select out a subset of Objects that contain Member {K:V} or all objects
 -spec subset_from_selector(select(), [j_obj()|value()]) -> [j_obj()].
+
+subset_from_selector(all, Array) -> 
+    F = fun(Obj)  -> 
+           case Obj of
+             _  when ?IS_OBJ(Obj) -> true;
+             _                    -> false
+          end
+    end,
+    lists:filter(F, Array);
 
 subset_from_selector({select, {K, V}}, Array) -> 
     F = fun(Obj) when ?IS_OBJ(Obj) -> 
