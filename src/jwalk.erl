@@ -61,41 +61,72 @@
 -export([delete/2, 
          get/2, get/3,
          set/3, 
-         set_p/3]).
+         set_p/3]
+       ).
 
 
--define(IS_MOCHI(X), (X == {struct,[]} orelse is_tuple(X) andalso 
-                      element(1, X) == struct andalso
-                      is_list(element(2, X))  andalso 
-                      element(1, hd(element(2, X))) /= struct)).
+-define(IS_MOCHI(X), 
+        (X == {struct,[]} orelse 
+         is_tuple(X) andalso 
+         element(1, X) == struct andalso
+         is_list(element(2, X))  andalso 
+         element(1, hd(element(2, X))) /= struct)
+       ).
 
--define(IS_EEP(X),  (X == {[]} orelse is_tuple(X) andalso 
-                     is_list(element(1, X)) andalso 
-                     tuple_size(hd(element(1, X))) == 2)).
+-define(IS_EEP(X),
+        (X == {[]} orelse 
+         is_tuple(X) andalso 
+         is_list(element(1, X)) andalso 
+         tuple_size(hd(element(1, X))) == 2)
+       ).
 
--define(IS_PL(X), (X == [{}] orelse is_list(X) andalso 
-                   is_tuple(hd(X)) andalso (element(1, hd(X)) /= struct) andalso
-                   tuple_size(hd(X)) == 2)).
+-define(IS_PL(X),
+        (X == [{}] orelse 
+         is_list(X) andalso 
+         is_tuple(hd(X)) andalso 
+         (element(1, hd(X)) /= struct) andalso
+         tuple_size(hd(X)) == 2)
+       ).
 
--define(IS_OBJ(X), (is_map(X) orelse ?IS_PL(X) orelse ?IS_EEP(X) orelse ?IS_MOCHI(X))).
+-define(IS_OBJ(X),
+        (is_map(X) orelse 
+         ?IS_PL(X) orelse 
+         ?IS_EEP(X) orelse 
+         ?IS_MOCHI(X))
+       ).
 
--define(EMPTY_STRUCT(X), (X == [{}] orelse X == {[]}) orelse X == {struct,[]}).
--define(EMPTY_OBJ(X), (?EMPTY_STRUCT(X) orelse X == #{})).
--define(NOT_MAP_OBJ(X), (not is_map(X)) andalso ?IS_OBJ(X)).
+-define(EMPTY_STRUCT(X),
+        (X == [{}] orelse X == {[]}) orelse 
+        X == {struct,[]}
+       ).
+
+-define(EMPTY_OBJ(X), 
+        (?EMPTY_STRUCT(X) orelse 
+                       X == #{})
+       ).
+
+-define(NOT_MAP_OBJ(X), 
+        (not is_map(X)) andalso 
+        ?IS_OBJ(X)
+       ).
 
 -define(IS_SELECTOR(K), 
         ((K == first) orelse
          (K == last) orelse 
          (K == new) orelse
          is_integer(K) orelse
-         (is_tuple(K) andalso (element(1, K) == select)))).
+         (is_tuple(K) andalso (element(1, K) == select)))
+       ).
 
 -define(IS_INDEX(K), 
         (K == first) orelse
         (K == last) orelse 
-        is_integer(K)).
+        is_integer(K)
+       ).
 
--define(NOT_SELECTOR(K), (not ?IS_SELECTOR(K))).
+-define(NOT_SELECTOR(K), 
+        (not ?IS_SELECTOR(K))
+       ).
 
 
 % Types
@@ -304,8 +335,8 @@ walk([{select, _} | _], Obj) when ?IS_OBJ(Obj) ->     throw({selector_used_on_ob
 walk([S | _], Obj) when ?IS_OBJ(Obj), ?IS_INDEX(S) -> throw({index_for_non_list, Obj});
 
 
-% Looking for a member given an object.
-% If the member for Name is an array, next element must be a Selector.
+% Looking for Member such that Name:Member is in the Object. If the found Member is an array
+% then the next element of the Path must be a Selector.
 walk([Name | Path], Obj) when ?IS_OBJ(Obj) -> 
   case get_member(Name, Obj) of
     [O | _] when ?IS_OBJ(O), ?NOT_SELECTOR(hd(Path)) ->
