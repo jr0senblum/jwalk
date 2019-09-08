@@ -1,24 +1,24 @@
 jwalk  
 =====
-## Helper module for working with Erlang representations of JSON: eep 18, map, mochijson-style and proplists representations
+## Helper module for working with Erlang representations of JSON: eep 18, map, mochijson-style and proplists.
 # 
 
 [![Build Status](https://travis-ci.org/jr0senblum/jwalk.svg?branch=master)](https://travis-ci.org/jr0senblum/jwalk)
 [![hex.pm version](https://img.shields.io/hexpm/v/jwalk.svg)](https://hex.pm/packages/jwalk)
 # 
 
-This work is inspired by [ej](https://github.com/seth/ej), but handles all common JSON representations: eep-18, map, mochijson-style and proplists - the types returned by [jsone](https://github.com/sile/jsone), [jiffy](https://github.com/davisp/jiffy) and [mochijson](https://github.com/mochi/mochiweb), for example. 
-Anything good about this is probably due to the contributors and maintainers of 
-ej, anything bad or awkward is completely my fault.
+This work is inspired by [ej](https://github.com/seth/ej), but handles all common JSON representations: eep-18, map, 
+mochijson-style and proplists - the types returned by [jsone](https://github.com/sile/jsone), 
+[jiffy](https://github.com/davisp/jiffy) and [mochijson](https://github.com/mochi/mochiweb), for example. 
+Anything good about this is probably due to the contributors and maintainers of ej, anything bad or awkward is completely my fault.
 
 ### Dependencies  
 The source code is a single file, and there are no dependencies other than:
 
-* Erlang 17.0 +
+* Erlang 19.0 +
 * Rebar3, for building
 
 Hex package manager is used for package management.
-
 
 ### QuickStart  
 ##### clone
