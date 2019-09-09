@@ -328,12 +328,12 @@ walk(_, [])                 -> undefined;
 
 walk(_, null)               -> undefined;
 
+% Can't Select or access by Index on an Object.
+walk([{select, _} | _], Obj) when ?IS_OBJ(Obj) ->
+  throw({selector_used_on_object, Obj});
 
-% Can't Select or Index an Object.
-walk([{select, _} | _], Obj) when ?IS_OBJ(Obj) ->     throw({selector_used_on_object, Obj});
-
-walk([S | _], Obj) when ?IS_OBJ(Obj), ?IS_INDEX(S) -> throw({index_for_non_list, Obj});
-
+walk([S | _], Obj) when ?IS_OBJ(Obj), ?IS_INDEX(S) -> 
+  throw({index_for_non_list, Obj});
 
 % Looking for Member such that Name:Member is in the Object. If the found Member is an array
 % then the next element of the Path must be a Selector.
@@ -346,44 +346,44 @@ walk([Name | Path], Obj) when ?IS_OBJ(Obj) ->
   end;
 
 walk([S | Path], {[_ | _]=Array}) ->
-  walk([S|Path], Array);
+  walk([S | Path], Array);
 
-walk([S|Path], {struct, [_|_]=Array}) ->
-  walk([S|Path], Array);
+walk([S | Path], {struct, [_|_]=Array}) ->
+  walk([S | Path], Array);
 
 
 % ARRAY with a Selector/Index: continue with selected subset.
-walk([{select, _}=S | Path], [_|_]=Array) ->
+walk([{select, _}=S | Path], [_ | _]=Array) ->
   continue(subset_from_selector(S, Array), Path);
 
-walk([S|Path], [_|_]=Array) when ?IS_INDEX(S) ->
+walk([S | Path], [_ | _]=Array) when ?IS_INDEX(S) ->
   continue(nth(S, Array), Path);
 
 
 % ARRAY with a Member Name: continue with the values from the Objects in the
 % Array that have Member = {Name, Value}.
-walk([Name|Path], [_|_]=Array) -> 
+walk([Name | Path], [_ | _]=Array) -> 
   continue(values_from_member(Name, Array), Path);
 
 
 % Element is something other than an Array, but we have a selector.
-walk([S|_], Element) when ?IS_SELECTOR(S) ->
+walk([S | _], Element) when ?IS_SELECTOR(S) ->
   case S of
-    {select, {_,_}} ->
+    {select, {_ , _}} ->
       throw({selector_used_on_non_list, Element});
     _ ->
       throw({index_for_non_list, Element})
   end.
 
 
-continue(false, _Path)                           -> undefined;
-continue(undefined, _Path)                       -> undefined;
-continue({struct,_}=Value, Path) when Path == [] -> Value;
-continue({_Name, Value}, Path) when Path == []   -> Value;
-continue(Value, Path) when Path == []            -> Value;
-continue({struct,_}=Value, Path)                 -> walk(Path, Value);
-continue({_Name, Value}, Path)                   -> walk(Path, Value);
-continue(Value, Path)                            -> walk(Path, Value).
+continue(false, _Path)                            -> undefined;
+continue(undefined, _Path)                        -> undefined;
+continue({struct, _}=Value, Path) when Path == [] -> Value;
+continue({_Name, Value}, Path) when Path == []    -> Value;
+continue(Value, Path) when Path == []             -> Value;
+continue({struct, _}=Value, Path)                 -> walk(Path, Value);
+continue({_Name, Value}, Path)                    -> walk(Path, Value);
+continue(Value, Path)                             -> walk(Path, Value).
 
 
 
