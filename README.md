@@ -1,6 +1,6 @@
 jwalk  
 =====
-## Helper module for working with Erlang representations of JSON: eep 18, map, mochijson-style and proplists.
+## Helper module for working with Erlang representations of JSON: eep 18, map, mochijson-style, and proplists.
 # 
 
 [![Build Status](https://travis-ci.org/jr0senblum/jwalk.svg?branch=master)](https://travis-ci.org/jr0senblum/jwalk)
@@ -9,7 +9,7 @@ jwalk
 
 This work is inspired by [ej](https://github.com/seth/ej), but handles all common JSON representations: eep-18, map, 
 mochijson-style and proplists - the types returned by [jsone](https://github.com/sile/jsone), 
-[jiffy](https://github.com/davisp/jiffy) and [mochijson](https://github.com/mochi/mochiweb), for example. 
+[jiffy](https://github.com/davisp/jiffy), and [mochijson](https://github.com/mochi/mochiweb), for example. 
 Anything good about this is probably due to the contributors and maintainers of ej, anything bad or awkward is completely my fault.
 
 ### Dependencies  
